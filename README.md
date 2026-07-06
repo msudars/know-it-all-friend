@@ -96,6 +96,8 @@ Avoid adding proprietary, organization-specific, or domain-specific terminology 
 
 ## Installation
 
+Know-it-all Friend uses [uv](https://docs.astral.sh/uv/) for environment and dependency management.
+
 ### 1. Clone the repository
 
 ```bash
@@ -103,32 +105,31 @@ git clone https://github.com/<your-org-or-username>/know-it-all-friend.git
 cd know-it-all-friend
 ```
 
-### 2. Create a virtual environment
+### 2. Install uv (if you don't already have it)
 
 ```bash
-python -m venv .venv
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+### 3. Create the environment and install dependencies
+
+```bash
+uv sync
+```
+
+This creates a project-local `.venv/` and installs the package plus its dependencies — including MarkItDown's `pdf`, `docx`, `pptx`, and `xlsx` extras — at the exact versions pinned in `uv.lock`, so every clone of this repo resolves to the same environment.
+
+### 4. Run the CLI
+
+```bash
+uv run kiaf --help
+```
+
+`uv run` executes commands inside the project's `.venv` without needing to activate it manually. If you prefer an activated shell:
+
+```bash
 source .venv/bin/activate
-```
-
-On Windows PowerShell:
-
-```powershell
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-```
-
-### 3. Install dependencies
-
-For the MVP conversion layer:
-
-```bash
-pip install "markitdown[all]"
-```
-
-When the project package is available locally:
-
-```bash
-pip install -e .
+kiaf --help
 ```
 
 ---
@@ -186,13 +187,13 @@ input/
 
 ### Step 2: Create a document inventory
 
-Planned command:
+Available now:
 
 ```bash
-kiaf inventory input/ --output storage/manifest.json
+uv run kiaf inventory input/ --output storage/metadata/manifest.json
 ```
 
-Expected output:
+Output (`storage/metadata/manifest.json`):
 
 ```json
 [
@@ -206,26 +207,29 @@ Expected output:
 ]
 ```
 
+Files are discovered recursively by default (pass `--no-recursive` to scan only the top level) and IDs are assigned in sorted path order, so the manifest is reproducible across runs on the same input set.
+
 ### Step 3: Convert documents to Markdown
 
-Planned command:
+Available now:
 
 ```bash
-kiaf convert input/ --output storage/markdown/
+uv run kiaf convert --manifest storage/metadata/manifest.json --output storage/markdown/
 ```
 
-Expected output:
+Output:
 
 ```text
 storage/markdown/
-├── report.md
-├── presentation.md
-├── publication.md
-├── table.md
-└── notes.md
+├── document_001.md
+├── document_002.md
+├── document_003.md
+└── document_004.md
 ```
 
-### Step 4: Extract metadata
+Markdown files are named by document ID rather than original filename, since two source files can share a name across different input subfolders — the ID is the stable join key back to the manifest. A per-file status log is written to `storage/metadata/conversion_log.json`; a failure on one document (unsupported format, corrupt file) is recorded there and does not stop the rest of the batch from converting.
+
+### Step 4: Extract metadata *(not yet implemented)*
 
 Planned command:
 
@@ -245,7 +249,7 @@ Example metadata:
 }
 ```
 
-### Step 5: Chunk documents
+### Step 5: Chunk documents *(not yet implemented)*
 
 Planned command:
 
@@ -253,7 +257,7 @@ Planned command:
 kiaf chunk storage/markdown/ --output storage/chunks/
 ```
 
-### Step 6: Build embeddings and vector index
+### Step 6: Build embeddings and vector index *(not yet implemented)*
 
 Planned command:
 
@@ -261,7 +265,7 @@ Planned command:
 kiaf index storage/chunks/ --vectorstore qdrant
 ```
 
-### Step 7: Search
+### Step 7: Search *(not yet implemented)*
 
 Planned command:
 
@@ -269,7 +273,7 @@ Planned command:
 kiaf search "Topic A"
 ```
 
-### Step 8: Ask questions with retrieved context
+### Step 8: Ask questions with retrieved context *(not yet implemented)*
 
 Planned command:
 
@@ -281,28 +285,11 @@ kiaf ask "What information is available about Topic A?"
 
 ## MarkItDown Conversion Backend
 
-The MVP uses MarkItDown for converting files to Markdown.
+The MVP uses MarkItDown for converting files to Markdown, wrapped behind an internal interface so the rest of the pipeline never depends on MarkItDown directly:
 
-Example Python usage:
-
-```python
-from markitdown import MarkItDown
-
-converter = MarkItDown(enable_plugins=False)
-result = converter.convert("input/report.docx")
-markdown_text = result.text_content
-
-with open("storage/markdown/report.md", "w", encoding="utf-8") as f:
-    f.write(markdown_text)
-```
-
-Know-it-all Friend should wrap MarkItDown behind an internal interface:
-
-```python
-class BaseConverter:
-    def convert(self, path: str) -> str:
-        raise NotImplementedError
-```
+- [`know_it_all_friend/conversion/base.py`](know_it_all_friend/conversion/base.py) — the `BaseConverter` interface
+- [`know_it_all_friend/conversion/markitdown_converter.py`](know_it_all_friend/conversion/markitdown_converter.py) — `MarkItDownConverter`, the first backend
+- [`know_it_all_friend/conversion/pipeline.py`](know_it_all_friend/conversion/pipeline.py) — runs a converter over a manifest, writing Markdown files and a per-file status log
 
 This keeps the architecture flexible so future conversion backends can be added without rewriting the whole pipeline.
 
@@ -432,6 +419,8 @@ Recommended for open-source projects:
 
 ## Project Status
 
-Early planning / MVP implementation.
+MVP implementation in progress.
 
-The first priority is the document-to-Markdown pipeline, followed by metadata, chunking, retrieval, and RAG.
+Working today: `uv`-managed environment, document inventory (`kiaf inventory`), and MarkItDown-based conversion (`kiaf convert`), both with tests.
+
+Not yet built: metadata extraction, chunking, embeddings, vector database integration, retrieval, and RAG.

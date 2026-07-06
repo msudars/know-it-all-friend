@@ -8,6 +8,8 @@ requires-python = ">=3.11"
 dependencies = [
     "markitdown[pdf,docx,pptx,xlsx]>=0.0.1a3",
     "typer>=0.12",
+    "numpy>=1.26",
+    "ollama>=0.4",
 ]
 
 [project.scripts]

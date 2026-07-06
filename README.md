@@ -229,57 +229,85 @@ storage/markdown/
 
 Markdown files are named by document ID rather than original filename, since two source files can share a name across different input subfolders — the ID is the stable join key back to the manifest. A per-file status log is written to `storage/metadata/conversion_log.json`; a failure on one document (unsupported format, corrupt file) is recorded there and does not stop the rest of the batch from converting.
 
-### Step 4: Extract metadata *(not yet implemented)*
+### Step 4: Extract metadata
 
-Planned command:
+Available now:
 
 ```bash
-kiaf metadata storage/markdown/ --output storage/metadata/
+uv run kiaf metadata
 ```
 
-Example metadata:
+Joins the manifest with the conversion log and the converted Markdown to produce `storage/metadata/documents.json`:
 
 ```json
 {
   "document_id": "document_001",
   "title": "Example Report",
   "source_file": "input/report.docx",
-  "markdown_file": "storage/markdown/report.md",
-  "topics": ["Topic A", "Topic B"]
+  "markdown_file": "storage/markdown/document_001.md",
+  "extension": "docx",
+  "size_bytes": 123456,
+  "word_count": 842
 }
 ```
 
-### Step 5: Chunk documents *(not yet implemented)*
+The title comes from the first Markdown heading, falling back to the filename. Documents whose conversion failed are skipped (they have no Markdown to work with) without blocking the rest.
 
-Planned command:
+### Step 5: Chunk documents
 
-```bash
-kiaf chunk storage/markdown/ --output storage/chunks/
-```
-
-### Step 6: Build embeddings and vector index *(not yet implemented)*
-
-Planned command:
+Available now:
 
 ```bash
-kiaf index storage/chunks/ --vectorstore qdrant
+uv run kiaf chunk
 ```
 
-### Step 7: Search *(not yet implemented)*
+Splits each Markdown document at its headings, then packs long sections paragraph-by-paragraph so no chunk exceeds `--max-chars` (default 1500). Chunks carry their document ID, title, source path, and nearest heading, and are written to `storage/chunks/chunks.json`.
 
-Planned command:
+### Step 6: Build embeddings and vector index
+
+Available now (requires a running [Ollama](https://ollama.com) server, see below):
 
 ```bash
-kiaf search "Topic A"
+uv run kiaf index
 ```
 
-### Step 8: Ask questions with retrieved context *(not yet implemented)*
+Embeds every chunk with a local Ollama embedding model (default `nomic-embed-text`) and writes a local vector index to `storage/indexes/default/` — three plain, inspectable files: `embeddings.npy`, `chunks.json`, and `config.json`. The config records which embedding model built the index so queries always use the same one.
 
-Planned command:
+### Step 7: Search
+
+Available now:
 
 ```bash
-kiaf ask "What information is available about Topic A?"
+uv run kiaf search "Topic A"
 ```
+
+Embeds the query, ranks chunks by cosine similarity, and prints the top matches with document titles, source paths, and snippets.
+
+### Step 8: Ask questions with retrieved context
+
+Available now:
+
+```bash
+uv run kiaf ask "What information is available about Topic A?"
+```
+
+Retrieves the most relevant chunks, sends them as numbered sources to a local Ollama chat model (default `llama3.2`, override with `--model`), and prints the answer followed by the numbered source list so every citation resolves back to a file.
+
+---
+
+## Local Models via Ollama
+
+The MVP is local-first: embeddings and answer generation both run through [Ollama](https://ollama.com) on your own machine, so document content never leaves it. One-time setup:
+
+```bash
+curl -fsSL https://ollama.com/install.sh | sh   # or your platform's installer
+ollama pull nomic-embed-text                    # embedding model (~270 MB)
+ollama pull llama3.2                            # chat model (~2 GB)
+```
+
+All model-backed commands accept `--host` if Ollama runs somewhere other than `localhost:11434`, and `kiaf index --embed-model` / `kiaf ask --model` to use different models.
+
+Like conversion, the model backends sit behind interfaces (`BaseEmbedder`, `BaseLLM`) so hosted APIs or other local runtimes can be added later without touching the pipeline.
 
 ---
 
@@ -419,8 +447,14 @@ Recommended for open-source projects:
 
 ## Project Status
 
-MVP implementation in progress.
+**MVP complete.** The full pipeline works end-to-end, with tests:
 
-Working today: `uv`-managed environment, document inventory (`kiaf inventory`), and MarkItDown-based conversion (`kiaf convert`), both with tests.
+- `kiaf inventory` — document discovery and manifest
+- `kiaf convert` — MarkItDown-based conversion to Markdown
+- `kiaf metadata` — per-document metadata extraction
+- `kiaf chunk` — heading-aware Markdown chunking
+- `kiaf index` — local embeddings (Ollama) + on-disk vector index
+- `kiaf search` — semantic search with sources
+- `kiaf ask` — RAG question answering with citations, via a local Ollama chat model
 
-Not yet built: metadata extraction, chunking, embeddings, vector database integration, retrieval, and RAG.
+Not yet built (post-MVP roadmap): knowledge enrichment (topics, entities, relationships), keyword search and metadata filtering, server-backed vector stores, the web interface, and the knowledge graph.

@@ -6,7 +6,7 @@ readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.11"
 dependencies = [
-    "markitdown>=0.0.1a3",
+    "markitdown[pdf,docx,pptx,xlsx]>=0.0.1a3",
     "typer>=0.12",
 ]
 

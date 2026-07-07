@@ -199,5 +199,33 @@ def ask(
             typer.echo(f"  [{number}] {source.title} — {source.source_file} ({source.chunk_id})")
 
 
+@app.command()
+def serve(
+    bind: str = typer.Option("127.0.0.1", help="Address to bind the API server to."),
+    port: int = typer.Option(8000, help="Port to serve the API on."),
+    metadata_file: Path = typer.Option(
+        Path("storage/metadata/documents.json"), "--metadata", help="Metadata index produced by `kiaf metadata`."
+    ),
+    index_dir: Path = typer.Option(
+        Path("storage/indexes/default"), "--index", help="Index directory produced by `kiaf index`."
+    ),
+    model: str = typer.Option(DEFAULT_CHAT_MODEL, help="Ollama chat model for /ask."),
+    host: str = typer.Option(None, help="Ollama host (defaults to OLLAMA_HOST or localhost)."),
+) -> None:
+    """Serve the knowledge base over a REST API (Phase 11)."""
+    import uvicorn
+
+    from know_it_all_friend.api.app import create_app
+
+    api = create_app(
+        metadata_path=metadata_file,
+        index_dir=index_dir,
+        ollama_host=host,
+        chat_model=model,
+    )
+    typer.echo(f"Serving API on http://{bind}:{port} (docs at /docs)")
+    uvicorn.run(api, host=bind, port=port)
+
+
 if __name__ == "__main__":
     app()

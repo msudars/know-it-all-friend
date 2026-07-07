@@ -10,6 +10,8 @@ dependencies = [
     "typer>=0.12",
     "numpy>=1.26",
     "ollama>=0.4",
+    "fastapi>=0.139.0",
+    "uvicorn>=0.50.2",
 ]
 
 [project.scripts]
@@ -24,6 +26,7 @@ packages = ["know_it_all_friend"]
 
 [dependency-groups]
 dev = [
+    "httpx>=0.28.1",
     "pytest>=8.0",
     "pytest-cov>=5.0",
     "ruff>=0.6",

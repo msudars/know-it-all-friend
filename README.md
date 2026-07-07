@@ -30,6 +30,8 @@ Search / API / Chat
 
 The first implementation uses Microsoft's `markitdown` package as the primary document-to-Markdown conversion backend.
 
+See [docs/architecture.md](docs/architecture.md) for how the pipeline stages, interfaces, and storage artifacts fit together.
+
 ---
 
 ## Why Markdown?
@@ -48,21 +50,27 @@ Rather than sending raw PDFs, presentations, spreadsheets, and office documents 
 
 ## Key Features
 
-Planned and/or in-progress features:
+Available today:
 
-- Recursive document discovery
+- Recursive document discovery (with OS/sidecar junk-file exclusion)
 - Document conversion to Markdown
 - Metadata extraction
 - Markdown repository creation
-- Document chunking
-- Embedding generation
-- Vector database storage
+- LLM-based entity and topic extraction
+- Heading-aware document chunking
+- Embedding generation (local, via Ollama)
+- On-disk vector index
 - Semantic search
-- Metadata filtering
-- Retrieval-augmented question answering
-- Source citations
-- Optional web interface
-- Optional knowledge graph
+- Retrieval-augmented question answering with source citations
+- Knowledge graph over documents and entities
+- REST API
+- Web knowledge explorer (search, ask with evidence, document browser)
+
+Planned:
+
+- Keyword/hybrid search and metadata filtering
+- Server-backed vector stores (e.g. Qdrant)
+- Relationship-aware retrieval
 
 ---
 
@@ -101,7 +109,7 @@ Know-it-all Friend uses [uv](https://docs.astral.sh/uv/) for environment and dep
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/<your-org-or-username>/know-it-all-friend.git
+git clone https://github.com/msudars/know-it-all-friend.git
 cd know-it-all-friend
 ```
 
@@ -134,36 +142,37 @@ kiaf --help
 
 ---
 
-## Recommended Repository Structure
+## Repository Structure
 
 ```text
 know-it-all-friend/
-├── docs/
-├── examples/
+├── docs/                     # architecture and design notes
 ├── tests/
-├── storage/
-│   ├── markdown/
-│   ├── chunks/
-│   ├── metadata/
-│   └── indexes/
+├── storage/                  # pipeline outputs (gitignored, regenerable)
+│   ├── markdown/             # converted documents
+│   ├── chunks/               # chunked retrieval units
+│   ├── metadata/             # manifest, conversion log, metadata, entities, graph
+│   └── indexes/              # vector indexes
 │
 ├── know_it_all_friend/
-│   ├── __init__.py
-│   ├── ingestion/
-│   ├── conversion/
-│   ├── metadata/
-│   ├── enrichment/
-│   ├── chunking/
-│   ├── embeddings/
-│   ├── vectorstore/
-│   ├── retrieval/
-│   ├── rag/
-│   ├── api/
-│   └── cli/
+│   ├── ingestion/            # Phase 1  — discovery + manifest
+│   ├── conversion/           # Phase 2  — MarkItDown → Markdown
+│   ├── metadata/             # Phase 3  — per-document metadata
+│   ├── enrichment/           # Phase 4  — LLM entity/topic extraction
+│   ├── chunking/             # Phase 5  — heading-aware chunking
+│   ├── embeddings/           # Phase 6  — BaseEmbedder + Ollama backend
+│   ├── vectorstore/          # Phase 7  — local on-disk vector index
+│   ├── retrieval/            # Phase 8  — semantic search
+│   ├── rag/                  # Phase 9  — cited answers, BaseLLM + Ollama backend
+│   ├── graph/                # Phase 12 — knowledge graph
+│   ├── api/                  # Phase 11 — FastAPI REST layer
+│   ├── ui/                   # Phase 11 — Streamlit knowledge explorer
+│   └── cli/                  # the `kiaf` command
 │
 ├── pyproject.toml
+├── uv.lock
 ├── README.md
-├── CLAUDE.md
+├── claude.md
 ├── LICENSE
 └── .gitignore
 ```
@@ -207,7 +216,7 @@ Output (`storage/metadata/manifest.json`):
 ]
 ```
 
-Files are discovered recursively by default (pass `--no-recursive` to scan only the top level) and IDs are assigned in sorted path order, so the manifest is reproducible across runs on the same input set.
+Files are discovered recursively by default (pass `--no-recursive` to scan only the top level) and IDs are assigned in sorted path order, so the manifest is reproducible across runs on the same input set. Hidden dotfiles, OS bookkeeping files (`.DS_Store`, `Thumbs.db`), and NTFS sidecar streams (`report.pdf:Zone.Identifier`) are skipped; pass `--include-system-files` to inventory them anyway.
 
 ### Step 3: Convert documents to Markdown
 
@@ -384,45 +393,20 @@ Do not start with a complex chatbot interface. Build the knowledge layer first.
 
 ## Development Roadmap
 
-### Phase 1: Document Inventory
+All roadmap phases have shipped; remaining work is post-roadmap (see Project Status).
 
-Create a manifest of all files in the input directory.
-
-### Phase 2: Document Conversion
-
-Convert files to Markdown using MarkItDown.
-
-### Phase 3: Metadata Extraction
-
-Extract basic metadata from files and Markdown content.
-
-### Phase 4: Knowledge Enrichment
-
-Extract topics, entities, and relationships.
-
-### Phase 5: Chunking
-
-Split Markdown documents into retrievable units.
-
-### Phase 6: Embeddings
-
-Generate vector representations of chunks.
-
-### Phase 7: Vector Database
-
-Store chunks, embeddings, and metadata.
-
-### Phase 8: Retrieval
-
-Support semantic search, keyword search, and metadata filters.
-
-### Phase 9: RAG
-
-Generate answers using retrieved context and provide citations.
-
-### Phase 10: UI and Knowledge Graph
-
-Add a web interface and relationship-aware exploration.
+| Phase | Scope | Status |
+| --- | --- | --- |
+| 1 | Document inventory (`kiaf inventory`) | ✅ |
+| 2 | Conversion to Markdown via MarkItDown (`kiaf convert`) | ✅ |
+| 3 | Metadata extraction (`kiaf metadata`) | ✅ |
+| 4 | Knowledge enrichment — entities and topics (`kiaf enrich`) | ✅ |
+| 5 | Heading-aware chunking (`kiaf chunk`) | ✅ |
+| 6 | Embeddings via local Ollama models (`kiaf index`) | ✅ |
+| 7 | Vector storage — local on-disk index (`kiaf index`) | ✅ (server-backed stores planned, see #5) |
+| 8 | Retrieval — semantic search (`kiaf search`) | ✅ (keyword/hybrid + filters planned) |
+| 9 | RAG with citations (`kiaf ask`) | ✅ |
+| 10 | UI and knowledge graph (`kiaf ui`, `kiaf serve`, `kiaf graph`) | ✅ |
 
 ---
 
@@ -468,13 +452,7 @@ What information is available about Technology A?
 
 ## License
 
-Add your chosen license here.
-
-Recommended for open-source projects:
-
-- MIT
-- Apache-2.0
-- BSD-3-Clause
+[MIT](LICENSE) © 2025 Meghana Sudarshan
 
 ---
 

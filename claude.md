@@ -247,7 +247,9 @@ know-it-all-friend/
 │   ├── vectorstore/
 │   ├── retrieval/
 │   ├── rag/
+│   ├── graph/
 │   ├── api/
+│   ├── ui/
 │   └── cli/
 │
 ├── pyproject.toml
@@ -260,7 +262,13 @@ know-it-all-friend/
 ---
 
 ## Development Roadmap
-Setup uv environment 
+
+> **Status (2026-07-07): all phases below have shipped.** The pipeline runs
+> end-to-end locally (`kiaf inventory → convert → metadata → enrich → chunk →
+> index → search / ask`), with `kiaf graph`, `kiaf serve` (REST API), and
+> `kiaf ui` (Streamlit explorer) on top. The environment is uv-managed.
+> Remaining backlog: server-backed vector stores (Qdrant, issue #5),
+> keyword/hybrid search and metadata filtering, relationship-aware retrieval.
 
 ### Phase 1 — Document Inventory
 
@@ -593,6 +601,8 @@ Deliverables:
 ---
 
 ## Minimum Viable Product (MVP)
+
+> **Status: complete** — everything below is implemented and tested.
 
 The first usable release should include:
 

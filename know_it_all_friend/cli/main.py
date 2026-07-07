@@ -227,5 +227,23 @@ def serve(
     uvicorn.run(api, host=bind, port=port)
 
 
+@app.command()
+def ui(
+    port: int = typer.Option(8501, help="Port to serve the web UI on."),
+) -> None:
+    """Launch the Streamlit knowledge explorer (Phase 11)."""
+    import subprocess
+    import sys
+
+    import know_it_all_friend.ui as ui_package
+
+    app_path = Path(ui_package.__file__).parent / "app.py"
+    typer.echo(f"Launching knowledge explorer on http://localhost:{port}")
+    subprocess.run(
+        [sys.executable, "-m", "streamlit", "run", str(app_path), "--server.port", str(port)],
+        check=True,
+    )
+
+
 if __name__ == "__main__":
     app()

@@ -34,6 +34,28 @@ def test_discover_files_missing_directory_raises(tmp_path: Path) -> None:
         discover_files(tmp_path / "missing")
 
 
+def test_discover_files_excludes_system_and_sidecar_files(tmp_path: Path) -> None:
+    (tmp_path / "report.pdf").write_bytes(b"%PDF-1.4")
+    (tmp_path / "report.pdf:Zone.Identifier").write_text("[ZoneTransfer]")
+    (tmp_path / "report.pdf:sec.endpointdlp").write_text("dlp")
+    (tmp_path / ".DS_Store").write_bytes(b"\x00")
+    (tmp_path / "Thumbs.db").write_bytes(b"\x00")
+    (tmp_path / ".hidden_notes").write_text("hidden")
+
+    files = discover_files(tmp_path)
+
+    assert [f.name for f in files] == ["report.pdf"]
+
+
+def test_discover_files_can_include_system_files(tmp_path: Path) -> None:
+    (tmp_path / "report.pdf").write_bytes(b"%PDF-1.4")
+    (tmp_path / "report.pdf:Zone.Identifier").write_text("[ZoneTransfer]")
+
+    files = discover_files(tmp_path, include_system_files=True)
+
+    assert [f.name for f in files] == ["report.pdf", "report.pdf:Zone.Identifier"]
+
+
 def test_build_manifest_assigns_sequential_ids(tmp_path: Path) -> None:
     (tmp_path / "a.txt").write_text("hello")
     (tmp_path / "b.pdf").write_bytes(b"%PDF-1.4")

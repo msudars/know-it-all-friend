@@ -31,9 +31,12 @@ def inventory(
         Path("storage/metadata/manifest.json"), "--output", "-o", help="Where to write the manifest."
     ),
     recursive: bool = typer.Option(True, help="Recurse into subdirectories."),
+    include_system_files: bool = typer.Option(
+        False, help="Also inventory hidden/OS bookkeeping files and NTFS sidecar streams."
+    ),
 ) -> None:
     """Scan a directory and write a document manifest (Phase 1)."""
-    records = build_manifest(input_dir, recursive=recursive)
+    records = build_manifest(input_dir, recursive=recursive, include_system_files=include_system_files)
     write_manifest(records, output)
     typer.echo(f"Discovered {len(records)} document(s). Manifest written to {output}")
 

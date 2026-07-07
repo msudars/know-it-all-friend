@@ -12,6 +12,7 @@ dependencies = [
     "ollama>=0.4",
     "fastapi>=0.139.0",
     "uvicorn>=0.50.2",
+    "streamlit>=1.59.0",
 ]
 
 [project.scripts]

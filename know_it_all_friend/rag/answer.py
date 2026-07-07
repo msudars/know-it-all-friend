@@ -54,13 +54,25 @@ def answer_question(
     llm: BaseLLM,
     top_k: int = 5,
 ) -> RagAnswer:
-    """Answer ``question`` from retrieved context, with source attribution.
+    """Answer ``question`` from retrieved context, with source attribution."""
+    results = search_index(question, store, embedder, top_k=top_k)
+    return answer_from_results(question, results, llm)
+
+
+def answer_from_results(
+    question: str,
+    results: list[SearchResult],
+    llm: BaseLLM,
+) -> RagAnswer:
+    """Answer ``question`` from already-retrieved ``results``.
+
+    Split out from :func:`answer_question` so callers that also display the
+    retrieved evidence (e.g. the web UI) retrieve once and reuse the results.
 
     The returned sources are exactly the retrieved chunks, numbered in
     prompt order, so every citation in the answer resolves back to a file.
     If nothing is retrieved, no model call is made and the answer says so.
     """
-    results = search_index(question, store, embedder, top_k=top_k)
     if not results:
         return RagAnswer(
             answer="No relevant information was found in the knowledge base.",

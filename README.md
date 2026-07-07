@@ -293,6 +293,39 @@ uv run kiaf ask "What information is available about Topic A?"
 
 Retrieves the most relevant chunks, sends them as numbered sources to a local Ollama chat model (default `llama3.2`, override with `--model`), and prints the answer followed by the numbered source list so every citation resolves back to a file.
 
+### Step 9: Extract entities and build the knowledge graph
+
+Available now:
+
+```bash
+uv run kiaf enrich
+uv run kiaf graph build
+uv run kiaf graph related "Topic A"
+uv run kiaf graph doc document_001
+```
+
+`kiaf enrich` extracts typed entities (people, organizations, projects, products, datasets, technologies, publications, locations, topics) from each document with the local chat model, writing `storage/metadata/entities.json`. `kiaf graph build` turns those into `storage/metadata/graph.json` — document→entity mentions plus entity↔entity co-occurrence edges weighted by shared documents — which `kiaf graph related` and `kiaf graph doc` explore from the command line.
+
+### Step 10: Serve the REST API
+
+Available now:
+
+```bash
+uv run kiaf serve
+```
+
+Exposes the knowledge base as JSON on `http://127.0.0.1:8000` (interactive docs at `/docs`): `GET /documents`, `GET /search?q=...`, `POST /ask`, `GET /health`. Backends are pluggable, so other frontends can build on this without touching the pipeline.
+
+### Step 11: Explore in the web UI
+
+Available now:
+
+```bash
+uv run kiaf ui
+```
+
+Launches a local Streamlit knowledge explorer on `http://localhost:8501` with three views: semantic **Search**, **Ask** (the generated answer side-by-side with the retrieved evidence it came from), and a **Documents** table with extracted entities and converted-Markdown previews. The UI is search-first by design — chat is one panel, not the front door.
+
 ---
 
 ## Local Models via Ollama
@@ -456,5 +489,9 @@ Recommended for open-source projects:
 - `kiaf index` — local embeddings (Ollama) + on-disk vector index
 - `kiaf search` — semantic search with sources
 - `kiaf ask` — RAG question answering with citations, via a local Ollama chat model
+- `kiaf enrich` — LLM-based entity and topic extraction
+- `kiaf graph` — knowledge graph over documents and entities (`build` / `related` / `doc`)
+- `kiaf serve` — REST API (FastAPI) over the knowledge base
+- `kiaf ui` — Streamlit knowledge explorer (search, ask with evidence, document browser)
 
-Not yet built (post-MVP roadmap): knowledge enrichment (topics, entities, relationships), keyword search and metadata filtering, server-backed vector stores, the web interface, and the knowledge graph.
+Not yet built (post-MVP roadmap): keyword/hybrid search and metadata filtering, server-backed vector stores (e.g. Qdrant), relationship-aware retrieval, and multi-user deployments.

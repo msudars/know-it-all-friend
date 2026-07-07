@@ -12,6 +12,13 @@ from know_it_all_friend.chunking.chunker import DEFAULT_MAX_CHARS, chunk_documen
 from know_it_all_friend.conversion.markitdown_converter import MarkItDownConverter
 from know_it_all_friend.conversion.pipeline import convert_documents, write_conversion_log
 from know_it_all_friend.embeddings.ollama_embedder import DEFAULT_EMBED_MODEL, OllamaEmbedder
+from know_it_all_friend.enrichment.extractor import (
+    DEFAULT_MAX_CHARS as DEFAULT_ENRICH_MAX_CHARS,
+)
+from know_it_all_friend.enrichment.extractor import (
+    enrich_documents,
+    write_entities,
+)
 from know_it_all_friend.ingestion.inventory import DocumentRecord, build_manifest, write_manifest
 from know_it_all_friend.metadata.extractor import build_document_metadata, load_metadata, write_metadata
 from know_it_all_friend.rag.answer import answer_question
@@ -82,6 +89,30 @@ def metadata(
     docs = build_document_metadata(records, conversion_log)
     write_metadata(docs, output)
     typer.echo(f"Extracted metadata for {len(docs)} document(s). Written to {output}")
+
+
+@app.command()
+def enrich(
+    metadata_file: Path = typer.Option(
+        Path("storage/metadata/documents.json"), "--metadata", help="Metadata index produced by `kiaf metadata`."
+    ),
+    output: Path = typer.Option(
+        Path("storage/metadata/entities.json"), "--output", "-o", help="Where to write the extracted entities."
+    ),
+    model: str = typer.Option(DEFAULT_CHAT_MODEL, help="Ollama chat model for entity extraction."),
+    max_chars: int = typer.Option(
+        DEFAULT_ENRICH_MAX_CHARS, help="How much of each document to send to the model."
+    ),
+    host: str = typer.Option(None, help="Ollama host (defaults to OLLAMA_HOST or localhost)."),
+) -> None:
+    """Extract entities and topics from each document (Phase 4)."""
+    docs = load_metadata(metadata_file)
+    llm = OllamaLLM(model=model, host=host)
+    enriched = enrich_documents(docs, llm, max_chars=max_chars)
+    write_entities(enriched, output)
+    typer.echo(
+        f"Enriched {len(enriched)}/{len(docs)} document(s) with {model}. Written to {output}"
+    )
 
 
 @app.command()

@@ -9,8 +9,13 @@ from pathlib import Path
 import typer
 
 from know_it_all_friend.conversion.markitdown_converter import MarkItDownConverter
-from know_it_all_friend.conversion.pipeline import convert_documents, write_conversion_log
+from know_it_all_friend.conversion.pipeline import (
+    ConversionResult,
+    convert_documents,
+    write_conversion_log,
+)
 from know_it_all_friend.ingestion.inventory import DocumentRecord, build_manifest, write_manifest
+from know_it_all_friend.metadata.extractor import build_metadata, write_metadata_index
 
 app = typer.Typer(help="Know-it-all Friend: turn document collections into a knowledge base.")
 
@@ -52,6 +57,31 @@ def convert(
     succeeded = sum(1 for r in results if r.status == "success")
     failed = len(results) - succeeded
     typer.echo(f"Converted {succeeded} document(s), {failed} failed. Log written to {log}")
+
+
+@app.command()
+def metadata(
+    manifest: Path = typer.Option(
+        Path("storage/metadata/manifest.json"), "--manifest", "-m", help="Manifest produced by `kiaf inventory`."
+    ),
+    conversion_log: Path = typer.Option(
+        Path("storage/metadata/conversion_log.json"), "--conversion-log", help="Log produced by `kiaf convert`."
+    ),
+    output: Path = typer.Option(
+        Path("storage/metadata/metadata.json"), "--output", "-o", help="Where to write the metadata index."
+    ),
+) -> None:
+    """Extract structured metadata for every document (Phase 3)."""
+    records = [DocumentRecord(**r) for r in json.loads(manifest.read_text(encoding="utf-8"))]
+    results = [ConversionResult(**r) for r in json.loads(conversion_log.read_text(encoding="utf-8"))]
+    entries = build_metadata(records, results)
+    write_metadata_index(entries, output)
+
+    with_markdown = sum(1 for e in entries if e.markdown_file is not None)
+    typer.echo(
+        f"Extracted metadata for {len(entries)} document(s) "
+        f"({with_markdown} with Markdown). Index written to {output}"
+    )
 
 
 if __name__ == "__main__":

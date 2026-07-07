@@ -229,25 +229,32 @@ storage/markdown/
 
 Markdown files are named by document ID rather than original filename, since two source files can share a name across different input subfolders — the ID is the stable join key back to the manifest. A per-file status log is written to `storage/metadata/conversion_log.json`; a failure on one document (unsupported format, corrupt file) is recorded there and does not stop the rest of the batch from converting.
 
-### Step 4: Extract metadata *(not yet implemented)*
+### Step 4: Extract metadata
 
-Planned command:
+Available now:
 
 ```bash
-kiaf metadata storage/markdown/ --output storage/metadata/
+uv run kiaf metadata --manifest storage/metadata/manifest.json --conversion-log storage/metadata/conversion_log.json --output storage/metadata/metadata.json
 ```
 
-Example metadata:
+Output (`storage/metadata/metadata.json`):
 
 ```json
-{
-  "document_id": "document_001",
-  "title": "Example Report",
-  "source_file": "input/report.docx",
-  "markdown_file": "storage/markdown/report.md",
-  "topics": ["Topic A", "Topic B"]
-}
+[
+  {
+    "document_id": "document_001",
+    "title": "Example Report",
+    "author": null,
+    "date": "2026-01-01",
+    "source_file": "input/report.docx",
+    "markdown_file": "storage/markdown/document_001.md",
+    "extension": "docx",
+    "size_bytes": 123456
+  }
+]
 ```
+
+The title comes from the first level-1 heading in the converted Markdown, falling back to the source filename; the date is the source file's modification date. Documents whose conversion failed still get an entry (with `"markdown_file": null`) so the index covers the whole collection. Content-based fields such as authors and topics are deferred to the knowledge-enrichment phase.
 
 ### Step 5: Chunk documents *(not yet implemented)*
 
@@ -421,6 +428,6 @@ Recommended for open-source projects:
 
 MVP implementation in progress.
 
-Working today: `uv`-managed environment, document inventory (`kiaf inventory`), and MarkItDown-based conversion (`kiaf convert`), both with tests.
+Working today: `uv`-managed environment, document inventory (`kiaf inventory`), MarkItDown-based conversion (`kiaf convert`), and metadata extraction (`kiaf metadata`), all with tests.
 
-Not yet built: metadata extraction, chunking, embeddings, vector database integration, retrieval, and RAG.
+Not yet built: chunking, embeddings, vector database integration, retrieval, and RAG.

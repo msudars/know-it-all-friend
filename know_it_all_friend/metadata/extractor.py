@@ -27,9 +27,16 @@ class DocumentMetadata:
 
 
 def extract_title(markdown_text: str) -> str | None:
-    """Return the first ATX heading (any level) in ``markdown_text``, if any."""
+    """Return the first ATX heading (any level) in ``markdown_text``, if any.
+
+    Converters can carry source-format line breaks (e.g. vertical tabs from
+    PPTX slides) into the heading, so all whitespace runs are collapsed to
+    single spaces.
+    """
     match = _ATX_HEADING.search(markdown_text)
-    return match.group(1) if match else None
+    if match is None:
+        return None
+    return " ".join(match.group(1).split())
 
 
 def build_document_metadata(

@@ -9,6 +9,16 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+# OS bookkeeping files that are never knowledge-base content. Names with a
+# colon are NTFS alternate data streams (e.g. `report.pdf:Zone.Identifier`,
+# `report.pdf:sec.endpointdlp`) that Windows attaches to downloads and WSL
+# exposes as regular files.
+_SYSTEM_FILE_NAMES = {".DS_Store", "Thumbs.db", "desktop.ini"}
+
+
+def _is_system_file(path: Path) -> bool:
+    return path.name in _SYSTEM_FILE_NAMES or ":" in path.name or path.name.startswith(".")
+
 
 @dataclass(frozen=True)
 class DocumentRecord:
@@ -19,23 +29,41 @@ class DocumentRecord:
     size_bytes: int
 
 
-def discover_files(input_dir: Path, recursive: bool = True) -> list[Path]:
+def discover_files(
+    input_dir: Path,
+    recursive: bool = True,
+    include_system_files: bool = False,
+) -> list[Path]:
     """Return every file under ``input_dir``, sorted by relative path.
 
     Sorting by relative path (rather than relying on filesystem traversal
     order) keeps the result deterministic across runs and platforms, which
     the sequential IDs in :func:`build_manifest` depend on.
+
+    Hidden dotfiles, OS bookkeeping files, and NTFS alternate-data-stream
+    sidecars are excluded unless ``include_system_files`` is set.
     """
     input_dir = Path(input_dir)
     if not input_dir.is_dir():
         raise NotADirectoryError(f"Input directory does not exist: {input_dir}")
 
     pattern = "**/*" if recursive else "*"
-    files = [p for p in input_dir.glob(pattern) if p.is_file()]
+    files = []
+    for path in input_dir.glob(pattern):
+        if not path.is_file():
+            continue
+        if not include_system_files and _is_system_file(path):
+            logger.info("Excluding system file %s", path)
+            continue
+        files.append(path)
     return sorted(files, key=lambda p: p.relative_to(input_dir).as_posix())
 
 
-def build_manifest(input_dir: Path, recursive: bool = True) -> list[DocumentRecord]:
+def build_manifest(
+    input_dir: Path,
+    recursive: bool = True,
+    include_system_files: bool = False,
+) -> list[DocumentRecord]:
     """Scan ``input_dir`` and build a manifest of :class:`DocumentRecord`.
 
     A file that cannot be stat'd (e.g. broken symlink, permission error) is
@@ -43,7 +71,8 @@ def build_manifest(input_dir: Path, recursive: bool = True) -> list[DocumentReco
     pipeline-wide rule that one bad file shouldn't block the rest.
     """
     records: list[DocumentRecord] = []
-    for index, file_path in enumerate(discover_files(input_dir, recursive=recursive), start=1):
+    files = discover_files(input_dir, recursive=recursive, include_system_files=include_system_files)
+    for index, file_path in enumerate(files, start=1):
         try:
             size_bytes = file_path.stat().st_size
         except OSError as exc:

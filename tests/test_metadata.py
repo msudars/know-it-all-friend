@@ -112,3 +112,10 @@ def test_write_and_load_metadata_round_trip(tmp_path: Path) -> None:
     assert loaded == docs
     data = json.loads(index_path.read_text(encoding="utf-8"))
     assert data[0]["title"] == "Example Report"
+
+
+def test_extract_title_collapses_internal_whitespace() -> None:
+    assert (
+        extract_title("# Machine Learning Toolbox\x0b\x0bfor Batteries\n")
+        == "Machine Learning Toolbox for Batteries"
+    )

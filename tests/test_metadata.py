@@ -1,12 +1,12 @@
 import json
 from pathlib import Path
 
-from know_it_all_friend.conversion.pipeline import ConversionResult
 from know_it_all_friend.ingestion.inventory import DocumentRecord
 from know_it_all_friend.metadata.extractor import (
-    build_metadata,
+    build_document_metadata,
     extract_title,
-    write_metadata_index,
+    load_metadata,
+    write_metadata,
 )
 
 
@@ -22,90 +22,93 @@ def _record(tmp_path: Path, name: str, doc_id: str = "document_001") -> Document
     )
 
 
-def _success(tmp_path: Path, doc_id: str, markdown: str) -> ConversionResult:
+def _success_entry(tmp_path: Path, doc_id: str, markdown: str) -> dict:
     markdown_path = tmp_path / f"{doc_id}.md"
     markdown_path.write_text(markdown, encoding="utf-8")
-    return ConversionResult(
-        document_id=doc_id,
-        source_path="irrelevant",
-        markdown_path=markdown_path.as_posix(),
-        status="success",
-        error=None,
-        timestamp="2026-01-01T00:00:00+00:00",
-    )
+    return {
+        "document_id": doc_id,
+        "source_path": "irrelevant",
+        "markdown_path": markdown_path.as_posix(),
+        "status": "success",
+        "error": None,
+        "timestamp": "2026-01-01T00:00:00+00:00",
+    }
 
 
-def test_extract_title_returns_first_h1() -> None:
-    assert extract_title("intro\n# Example Report\n\n# Second\n") == "Example Report"
+def test_extract_title_returns_first_heading() -> None:
+    assert extract_title("intro\n## Example Report\n\n# Later\n") == "Example Report"
 
 
-def test_extract_title_returns_none_without_h1() -> None:
-    assert extract_title("## Only a subsection\nbody text\n") is None
+def test_extract_title_returns_none_without_heading() -> None:
+    assert extract_title("just body text\nno headings\n") is None
 
 
-def test_build_metadata_uses_markdown_heading_as_title(tmp_path: Path) -> None:
+def test_build_document_metadata_uses_heading_and_counts_words(tmp_path: Path) -> None:
     record = _record(tmp_path, "report.txt")
-    result = _success(tmp_path, "document_001", "# Example Report\n\nBody.\n")
+    entry = _success_entry(tmp_path, "document_001", "# Example Report\n\nOne two three.\n")
 
-    entries = build_metadata([record], [result])
+    docs = build_document_metadata([record], [entry])
 
-    assert entries[0].title == "Example Report"
-    assert entries[0].markdown_file == result.markdown_path
-    assert entries[0].source_file == record.path
-    assert entries[0].date is not None
+    assert docs[0].title == "Example Report"
+    assert docs[0].markdown_file == entry["markdown_path"]
+    assert docs[0].source_file == record.path
+    assert docs[0].word_count == 6
 
 
-def test_build_metadata_falls_back_to_filename_stem(tmp_path: Path) -> None:
+def test_build_document_metadata_falls_back_to_filename_stem(tmp_path: Path) -> None:
     record = _record(tmp_path, "quarterly_notes.txt")
-    result = _success(tmp_path, "document_001", "no heading here\n")
+    entry = _success_entry(tmp_path, "document_001", "no heading here\n")
 
-    entries = build_metadata([record], [result])
+    docs = build_document_metadata([record], [entry])
 
-    assert entries[0].title == "quarterly_notes"
-
-
-def test_build_metadata_covers_failed_conversions(tmp_path: Path) -> None:
-    record = _record(tmp_path, "broken.pdf")
-    failed = ConversionResult(
-        document_id="document_001",
-        source_path=record.path,
-        markdown_path=None,
-        status="failed",
-        error="simulated conversion failure",
-        timestamp="2026-01-01T00:00:00+00:00",
-    )
-
-    entries = build_metadata([record], [failed])
-
-    assert entries[0].markdown_file is None
-    assert entries[0].title == "broken"
+    assert docs[0].title == "quarterly_notes"
 
 
-def test_build_metadata_survives_missing_markdown_file(tmp_path: Path) -> None:
+def test_build_document_metadata_skips_failed_conversions(tmp_path: Path) -> None:
+    good = _record(tmp_path, "good.txt", doc_id="document_001")
+    bad = _record(tmp_path, "bad.pdf", doc_id="document_002")
+    entries = [
+        _success_entry(tmp_path, "document_001", "# Good\n"),
+        {
+            "document_id": "document_002",
+            "source_path": bad.path,
+            "markdown_path": None,
+            "status": "failed",
+            "error": "simulated conversion failure",
+            "timestamp": "2026-01-01T00:00:00+00:00",
+        },
+    ]
+
+    docs = build_document_metadata([good, bad], entries)
+
+    assert [d.document_id for d in docs] == ["document_001"]
+
+
+def test_build_document_metadata_skips_missing_markdown_file(tmp_path: Path) -> None:
     record = _record(tmp_path, "gone.txt")
-    result = ConversionResult(
-        document_id="document_001",
-        source_path=record.path,
-        markdown_path=(tmp_path / "missing.md").as_posix(),
-        status="success",
-        error=None,
-        timestamp="2026-01-01T00:00:00+00:00",
-    )
+    entry = {
+        "document_id": "document_001",
+        "source_path": record.path,
+        "markdown_path": (tmp_path / "missing.md").as_posix(),
+        "status": "success",
+        "error": None,
+        "timestamp": "2026-01-01T00:00:00+00:00",
+    }
 
-    entries = build_metadata([record], [result])
+    docs = build_document_metadata([record], [entry])
 
-    assert entries[0].title == "gone"
+    assert docs == []
 
 
-def test_write_metadata_index_round_trip(tmp_path: Path) -> None:
+def test_write_and_load_metadata_round_trip(tmp_path: Path) -> None:
     record = _record(tmp_path, "report.txt")
-    result = _success(tmp_path, "document_001", "# Example Report\n")
-    entries = build_metadata([record], [result])
-    index_path = tmp_path / "metadata.json"
+    entry = _success_entry(tmp_path, "document_001", "# Example Report\n")
+    docs = build_document_metadata([record], [entry])
+    index_path = tmp_path / "documents.json"
 
-    write_metadata_index(entries, index_path)
+    write_metadata(docs, index_path)
+    loaded = load_metadata(index_path)
 
+    assert loaded == docs
     data = json.loads(index_path.read_text(encoding="utf-8"))
-    assert data[0]["document_id"] == "document_001"
     assert data[0]["title"] == "Example Report"
-    assert data[0]["author"] is None

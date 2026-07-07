@@ -17,7 +17,15 @@ from know_it_all_friend.enrichment.extractor import (
 )
 from know_it_all_friend.enrichment.extractor import (
     enrich_documents,
+    load_entities,
     write_entities,
+)
+from know_it_all_friend.graph.builder import (
+    build_graph,
+    entities_of_document,
+    load_graph,
+    related_to_entity,
+    write_graph,
 )
 from know_it_all_friend.ingestion.inventory import DocumentRecord, build_manifest, write_manifest
 from know_it_all_friend.metadata.extractor import build_document_metadata, load_metadata, write_metadata
@@ -27,6 +35,8 @@ from know_it_all_friend.retrieval.search import search_index
 from know_it_all_friend.vectorstore.local_store import LocalVectorStore, build_index
 
 app = typer.Typer(help="Know-it-all Friend: turn document collections into a knowledge base.")
+graph_app = typer.Typer(help="Build and explore the knowledge graph (Phase 12).")
+app.add_typer(graph_app, name="graph")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -197,6 +207,72 @@ def ask(
         typer.echo("Sources:")
         for number, source in enumerate(result.sources, start=1):
             typer.echo(f"  [{number}] {source.title} — {source.source_file} ({source.chunk_id})")
+
+
+@graph_app.command("build")
+def graph_build(
+    metadata_file: Path = typer.Option(
+        Path("storage/metadata/documents.json"), "--metadata", help="Metadata index produced by `kiaf metadata`."
+    ),
+    entities_file: Path = typer.Option(
+        Path("storage/metadata/entities.json"), "--entities", help="Entities produced by `kiaf enrich`."
+    ),
+    output: Path = typer.Option(
+        Path("storage/metadata/graph.json"), "--output", "-o", help="Where to write the graph."
+    ),
+) -> None:
+    """Build the knowledge graph from extracted entities (Phase 12)."""
+    docs = load_metadata(metadata_file)
+    enriched = load_entities(entities_file)
+    graph = build_graph(docs, enriched)
+    write_graph(graph, output)
+    typer.echo(
+        f"Graph with {len(graph['documents'])} document(s), {len(graph['entities'])} entit(ies), "
+        f"{len(graph['co_occurrences'])} edge(s) written to {output}"
+    )
+
+
+@graph_app.command("related")
+def graph_related(
+    name: str = typer.Argument(..., help="Entity name to look up (case-insensitive)."),
+    graph_file: Path = typer.Option(
+        Path("storage/metadata/graph.json"), "--graph", help="Graph produced by `kiaf graph build`."
+    ),
+    top: int = typer.Option(10, help="How many related entities to show."),
+) -> None:
+    """Show the documents and entities related to an entity."""
+    related = related_to_entity(load_graph(graph_file), name)
+    if related is None:
+        typer.echo(f"Entity not found in the graph: {name!r}")
+        raise typer.Exit(code=1)
+
+    typer.echo(f"{related['name']} ({related['type']})\n\nDocuments:")
+    for doc in related["documents"]:
+        typer.echo(f"  {doc['document_id']}  {doc.get('title', '')} — {doc.get('source_file', '')}")
+    if related["related_entities"]:
+        typer.echo("\nRelated entities (shared documents):")
+        for entity in related["related_entities"][:top]:
+            typer.echo(f"  {entity['weight']:3d}  {entity['name']}")
+
+
+@graph_app.command("doc")
+def graph_doc(
+    document_id: str = typer.Argument(..., help="Document ID to inspect, e.g. document_001."),
+    graph_file: Path = typer.Option(
+        Path("storage/metadata/graph.json"), "--graph", help="Graph produced by `kiaf graph build`."
+    ),
+) -> None:
+    """Show the entities mentioned in a document."""
+    graph = load_graph(graph_file)
+    grouped = entities_of_document(graph, document_id)
+    if grouped is None:
+        typer.echo(f"Document not found in the graph: {document_id!r}")
+        raise typer.Exit(code=1)
+
+    info = graph["documents"][document_id]
+    typer.echo(f"{document_id}  {info.get('title', '')} — {info.get('source_file', '')}\n")
+    for entity_type in sorted(grouped):
+        typer.echo(f"{entity_type}: {', '.join(grouped[entity_type])}")
 
 
 @app.command()

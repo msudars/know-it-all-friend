@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 
 from know_it_all_friend.embeddings.base import BaseEmbedder
+from know_it_all_friend.retry import with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +27,7 @@ class OllamaEmbedder(BaseEmbedder):
         embeddings: list[list[float]] = []
         for start in range(0, len(texts), _BATCH_SIZE):
             batch = texts[start : start + _BATCH_SIZE]
-            response = self._client.embed(model=self.model, input=batch)
+            response = with_retry(lambda batch=batch: self._client.embed(model=self.model, input=batch))
             embeddings.extend(response["embeddings"])
             logger.info("Embedded %d/%d text(s) with %s", len(embeddings), len(texts), self.model)
         return embeddings

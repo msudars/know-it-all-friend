@@ -57,18 +57,19 @@ Available today:
 - Metadata extraction
 - Markdown repository creation
 - LLM-based entity and topic extraction
-- Heading-aware document chunking
+- Heading-aware document chunking with word-boundary-safe overlap between consecutive chunks
 - Embedding generation (local, via Ollama)
 - On-disk vector index
-- Semantic search
-- Retrieval-augmented question answering with source citations
+- Semantic search, with optional BM25 hybrid keyword search, MMR result diversification, score thresholds, and document-ID filtering
+- Retrieval-augmented question answering with source citations, out-of-range citation detection, and streaming answers
+- Retrieval quality evaluation harness (hit-rate@k, MRR) against labeled queries
+- Content-hash based document staleness detection
 - Knowledge graph over documents and entities
 - REST API
 - Web knowledge explorer (search, ask with evidence, document browser)
 
 Planned:
 
-- Keyword/hybrid search and metadata filtering
 - Server-backed vector stores (e.g. Qdrant)
 - Relationship-aware retrieval
 
@@ -404,7 +405,7 @@ All roadmap phases have shipped; remaining work is post-roadmap (see Project Sta
 | 5 | Heading-aware chunking (`kiaf chunk`) | ✅ |
 | 6 | Embeddings via local Ollama models (`kiaf index`) | ✅ |
 | 7 | Vector storage — local on-disk index (`kiaf index`) | ✅ (server-backed stores planned, see #5) |
-| 8 | Retrieval — semantic search (`kiaf search`) | ✅ (keyword/hybrid + filters planned) |
+| 8 | Retrieval — semantic search, hybrid BM25 + MMR + filters (`kiaf search`) | ✅ |
 | 9 | RAG with citations (`kiaf ask`) | ✅ |
 | 10 | UI and knowledge graph (`kiaf ui`, `kiaf serve`, `kiaf graph`) | ✅ |
 
@@ -463,13 +464,14 @@ What information is available about Technology A?
 - `kiaf inventory` — document discovery and manifest
 - `kiaf convert` — MarkItDown-based conversion to Markdown
 - `kiaf metadata` — per-document metadata extraction
-- `kiaf chunk` — heading-aware Markdown chunking
+- `kiaf chunk` — heading-aware Markdown chunking with word-boundary-safe overlap
 - `kiaf index` — local embeddings (Ollama) + on-disk vector index
-- `kiaf search` — semantic search with sources
-- `kiaf ask` — RAG question answering with citations, via a local Ollama chat model
+- `kiaf search` — semantic search with sources; optional hybrid BM25, MMR diversification, score threshold, document filtering
+- `kiaf ask` — RAG question answering with citations, streaming, and out-of-range citation warnings, via a local Ollama chat model
+- `kiaf eval-retrieval` — retrieval quality evaluation (hit-rate@k, MRR) against labeled queries
 - `kiaf enrich` — LLM-based entity and topic extraction
 - `kiaf graph` — knowledge graph over documents and entities (`build` / `related` / `doc`)
 - `kiaf serve` — REST API (FastAPI) over the knowledge base
 - `kiaf ui` — Streamlit knowledge explorer (search, ask with evidence, document browser)
 
-Not yet built (post-MVP roadmap): keyword/hybrid search and metadata filtering, server-backed vector stores (e.g. Qdrant), relationship-aware retrieval, and multi-user deployments.
+Not yet built (post-MVP roadmap): server-backed vector stores (e.g. Qdrant), relationship-aware retrieval, and multi-user deployments.

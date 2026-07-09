@@ -1,10 +1,14 @@
 import json
 from pathlib import Path
 
+import hashlib
+
 from know_it_all_friend.ingestion.inventory import DocumentRecord
 from know_it_all_friend.metadata.extractor import (
+    DocumentMetadata,
     build_document_metadata,
     extract_title,
+    find_changed_documents,
     load_metadata,
     write_metadata,
 )
@@ -119,3 +123,37 @@ def test_extract_title_collapses_internal_whitespace() -> None:
         extract_title("# Machine Learning Toolbox\x0b\x0bfor Batteries\n")
         == "Machine Learning Toolbox for Batteries"
     )
+
+
+def test_build_document_metadata_computes_content_hash(tmp_path: Path) -> None:
+    record = _record(tmp_path, "report.txt")
+    markdown = "# Example Report\n\nbody text\n"
+    entry = _success_entry(tmp_path, "document_001", markdown)
+
+    docs = build_document_metadata([record], [entry])
+
+    assert docs[0].content_hash == hashlib.sha256(markdown.encode("utf-8")).hexdigest()
+    assert docs[0].modified_at != ""
+
+
+def test_find_changed_documents_flags_new_and_modified_only() -> None:
+    def _doc(doc_id: str, content_hash: str) -> DocumentMetadata:
+        return DocumentMetadata(
+            document_id=doc_id,
+            title="t",
+            source_file="s",
+            markdown_file="m",
+            extension="txt",
+            size_bytes=0,
+            word_count=0,
+            content_hash=content_hash,
+        )
+
+    previous = [_doc("document_001", "hash-a"), _doc("document_002", "hash-b")]
+    current = [
+        _doc("document_001", "hash-a"),  # unchanged
+        _doc("document_002", "hash-b-changed"),  # modified
+        _doc("document_003", "hash-c"),  # new
+    ]
+
+    assert find_changed_documents(previous, current) == ["document_002", "document_003"]

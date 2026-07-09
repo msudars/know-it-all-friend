@@ -69,11 +69,52 @@ def test_long_sections_are_packed_within_max_chars(tmp_path: Path) -> None:
 def test_oversized_paragraph_is_hard_split(tmp_path: Path) -> None:
     doc = _doc(tmp_path, "word " * 100)
 
-    chunks = chunk_markdown(Path(doc.markdown_file).read_text(encoding="utf-8"), doc, max_chars=80)
+    chunks = chunk_markdown(
+        Path(doc.markdown_file).read_text(encoding="utf-8"), doc, max_chars=80, overlap_chars=0
+    )
 
     assert len(chunks) > 1
     assert all(len(c.text) <= 80 for c in chunks)
     assert " ".join(c.text for c in chunks).split() == ["word"] * 100
+
+
+def test_overlap_carries_word_boundary_safe_tail_into_next_chunk(tmp_path: Path) -> None:
+    paragraphs = "\n\n".join(f"paragraph {i} with some distinct words here" for i in range(10))
+    doc = _doc(tmp_path, f"# Section\n\n{paragraphs}\n")
+
+    chunks = chunk_markdown(
+        Path(doc.markdown_file).read_text(encoding="utf-8"), doc, max_chars=150, overlap_chars=50
+    )
+
+    assert len(chunks) > 1
+    for previous, current in zip(chunks, chunks[1:]):
+        tail_words = previous.text.split()[-3:]
+        assert any(word in current.text.split("\n\n")[0] for word in tail_words)
+
+
+def test_overlap_does_not_cross_heading_boundary(tmp_path: Path) -> None:
+    doc = _doc(tmp_path, "# Section One\nalpha content here\n\n# Section Two\nbeta content here\n")
+
+    chunks = chunk_markdown(
+        Path(doc.markdown_file).read_text(encoding="utf-8"), doc, max_chars=1500, overlap_chars=200
+    )
+
+    assert [c.text for c in chunks] == [
+        "# Section One\nalpha content here",
+        "# Section Two\nbeta content here",
+    ]
+
+
+def test_overlap_respects_max_chars_budget(tmp_path: Path) -> None:
+    paragraphs = "\n\n".join(f"paragraph number {i} with some words" for i in range(20))
+    doc = _doc(tmp_path, f"# Big Section\n\n{paragraphs}\n")
+
+    chunks = chunk_markdown(
+        Path(doc.markdown_file).read_text(encoding="utf-8"), doc, max_chars=100, overlap_chars=200
+    )
+
+    assert len(chunks) > 1
+    assert all(len(c.text) <= 100 for c in chunks)
 
 
 def test_headings_inside_code_fences_are_ignored(tmp_path: Path) -> None:

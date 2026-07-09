@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
 from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 from know_it_all_friend.ingestion.inventory import DocumentRecord
@@ -24,6 +26,10 @@ class DocumentMetadata:
     extension: str
     size_bytes: int
     word_count: int
+    # Defaulted so hand-built fixtures (tests, older callers) don't need to
+    # supply them; real documents get both from build_document_metadata.
+    content_hash: str = ""
+    modified_at: str = ""
 
 
 def extract_title(markdown_text: str) -> str | None:
@@ -37,6 +43,20 @@ def extract_title(markdown_text: str) -> str | None:
     if match is None:
         return None
     return " ".join(match.group(1).split())
+
+
+def _source_modified_at(source_path: str) -> str:
+    """Return the source file's modification time as ISO-8601, or "" if unavailable.
+
+    The source file may not exist relative to the current working directory
+    (e.g. it was moved, or the manifest was built elsewhere), so this is
+    best-effort staleness metadata rather than a hard requirement.
+    """
+    try:
+        mtime = Path(source_path).stat().st_mtime
+    except OSError:
+        return ""
+    return datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat()
 
 
 def build_document_metadata(
@@ -83,11 +103,30 @@ def build_document_metadata(
             extension=record.extension,
             size_bytes=record.size_bytes,
             word_count=len(markdown_text.split()),
+            content_hash=hashlib.sha256(markdown_text.encode("utf-8")).hexdigest(),
+            modified_at=_source_modified_at(record.path),
         )
         docs.append(doc)
         logger.info("Extracted metadata for %s: %r (%d words)", record.id, doc.title, doc.word_count)
 
     return docs
+
+
+def find_changed_documents(
+    previous: list[DocumentMetadata], current: list[DocumentMetadata]
+) -> list[str]:
+    """Return document IDs in ``current`` that are new or whose content changed.
+
+    Compares ``content_hash`` by ``document_id`` against a prior metadata
+    snapshot, so callers can detect staleness (e.g. before re-embedding)
+    without re-hashing anything themselves.
+    """
+    previous_hashes = {doc.document_id: doc.content_hash for doc in previous}
+    return [
+        doc.document_id
+        for doc in current
+        if previous_hashes.get(doc.document_id) != doc.content_hash
+    ]
 
 
 def write_metadata(docs: list[DocumentMetadata], output_path: Path) -> None:

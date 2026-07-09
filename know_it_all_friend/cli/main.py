@@ -8,7 +8,13 @@ from pathlib import Path
 
 import typer
 
-from know_it_all_friend.chunking.chunker import DEFAULT_MAX_CHARS, chunk_documents, load_chunks, write_chunks
+from know_it_all_friend.chunking.chunker import (
+    DEFAULT_MAX_CHARS,
+    DEFAULT_OVERLAP_CHARS,
+    chunk_documents,
+    load_chunks,
+    write_chunks,
+)
 from know_it_all_friend.conversion.markitdown_converter import MarkItDownConverter
 from know_it_all_friend.conversion.pipeline import convert_documents, write_conversion_log
 from know_it_all_friend.embeddings.ollama_embedder import DEFAULT_EMBED_MODEL, OllamaEmbedder
@@ -20,6 +26,7 @@ from know_it_all_friend.enrichment.extractor import (
     load_entities,
     write_entities,
 )
+from know_it_all_friend.eval.retrieval_eval import evaluate_retrieval, load_eval_cases
 from know_it_all_friend.graph.builder import (
     build_graph,
     entities_of_document,
@@ -29,7 +36,7 @@ from know_it_all_friend.graph.builder import (
 )
 from know_it_all_friend.ingestion.inventory import DocumentRecord, build_manifest, write_manifest
 from know_it_all_friend.metadata.extractor import build_document_metadata, load_metadata, write_metadata
-from know_it_all_friend.rag.answer import answer_question
+from know_it_all_friend.rag.answer import answer_question, answer_question_stream
 from know_it_all_friend.rag.ollama_llm import DEFAULT_CHAT_MODEL, OllamaLLM
 from know_it_all_friend.retrieval.search import search_index
 from know_it_all_friend.vectorstore.local_store import LocalVectorStore, build_index
@@ -134,10 +141,13 @@ def chunk(
         Path("storage/chunks/chunks.json"), "--output", "-o", help="Where to write the chunks."
     ),
     max_chars: int = typer.Option(DEFAULT_MAX_CHARS, help="Maximum characters per chunk."),
+    overlap_chars: int = typer.Option(
+        DEFAULT_OVERLAP_CHARS, help="Characters of trailing context carried into the next chunk."
+    ),
 ) -> None:
     """Split Markdown documents into retrievable chunks (Phase 5)."""
     docs = load_metadata(metadata_file)
-    chunks = chunk_documents(docs, max_chars=max_chars)
+    chunks = chunk_documents(docs, max_chars=max_chars, overlap_chars=overlap_chars)
     write_chunks(chunks, output)
     typer.echo(f"Created {len(chunks)} chunk(s) from {len(docs)} document(s). Written to {output}")
 
@@ -168,12 +178,31 @@ def search(
         Path("storage/indexes/default"), "--index", help="Index directory produced by `kiaf index`."
     ),
     top_k: int = typer.Option(5, help="Number of results to return."),
+    mode: str = typer.Option(
+        "vector", help="'vector' for pure cosine search, 'hybrid' to fuse in BM25 keyword search."
+    ),
+    alpha: float = typer.Option(0.5, help="Hybrid mode only: RRF weight toward vector vs. keyword."),
+    score_threshold: float = typer.Option(
+        None, help="Drop results below this score instead of always returning top_k."
+    ),
+    diversify: bool = typer.Option(
+        False, help="Re-select results with MMR so near-duplicate chunks don't crowd out distinct ones."
+    ),
     host: str = typer.Option(None, help="Ollama host (defaults to OLLAMA_HOST or localhost)."),
 ) -> None:
     """Semantic search over the indexed chunks (Phase 8)."""
     store = LocalVectorStore.load(index_dir)
     embedder = OllamaEmbedder(model=store.embedding_model, host=host)
-    results = search_index(query, store, embedder, top_k=top_k)
+    results = search_index(
+        query,
+        store,
+        embedder,
+        top_k=top_k,
+        mode=mode,
+        alpha=alpha,
+        score_threshold=score_threshold,
+        diversify=diversify,
+    )
 
     if not results:
         typer.echo("No results (is the index empty?).")
@@ -194,19 +223,60 @@ def ask(
     ),
     model: str = typer.Option(DEFAULT_CHAT_MODEL, help="Ollama chat model to generate the answer."),
     top_k: int = typer.Option(5, help="Number of chunks to retrieve as context."),
+    stream: bool = typer.Option(False, help="Print the answer incrementally as it's generated."),
     host: str = typer.Option(None, help="Ollama host (defaults to OLLAMA_HOST or localhost)."),
 ) -> None:
     """Answer a question from retrieved context, with citations (Phase 9)."""
     store = LocalVectorStore.load(index_dir)
     embedder = OllamaEmbedder(model=store.embedding_model, host=host)
     llm = OllamaLLM(model=model, host=host)
-    result = answer_question(question, store, embedder, llm, top_k=top_k)
 
-    typer.echo(f"\n{result.answer}\n")
+    if stream:
+        typer.echo()
+        generator = answer_question_stream(question, store, embedder, llm, top_k=top_k)
+        result = None
+        try:
+            while True:
+                typer.echo(next(generator), nl=False)
+        except StopIteration as stop:
+            result = stop.value
+        typer.echo("\n")
+    else:
+        result = answer_question(question, store, embedder, llm, top_k=top_k)
+        typer.echo(f"\n{result.answer}\n")
+
+    if result.invalid_citations:
+        typer.echo(f"Warning: answer cites out-of-range source(s): {result.invalid_citations}")
     if result.sources:
         typer.echo("Sources:")
         for number, source in enumerate(result.sources, start=1):
             typer.echo(f"  [{number}] {source.title} — {source.source_file} ({source.chunk_id})")
+
+
+@app.command("eval-retrieval")
+def eval_retrieval(
+    cases_file: Path = typer.Argument(
+        ..., help='JSON file of eval cases: [{"query": "...", "expected_document_id": "document_001"}, ...]'
+    ),
+    index_dir: Path = typer.Option(
+        Path("storage/indexes/default"), "--index", help="Index directory produced by `kiaf index`."
+    ),
+    top_k: int = typer.Option(5, help="Number of results to check for a hit."),
+    host: str = typer.Option(None, help="Ollama host (defaults to OLLAMA_HOST or localhost)."),
+) -> None:
+    """Measure retrieval quality (hit-rate@k, MRR) against labeled queries."""
+    cases = load_eval_cases(cases_file)
+    store = LocalVectorStore.load(index_dir)
+    embedder = OllamaEmbedder(model=store.embedding_model, host=host)
+    report = evaluate_retrieval(cases, store, embedder, top_k=top_k)
+
+    typer.echo(f"\nCases: {report.num_cases}   top_k: {report.top_k}")
+    typer.echo(f"Hit-rate@{top_k}: {report.hit_rate:.2%}")
+    typer.echo(f"Mean reciprocal rank: {report.mean_reciprocal_rank:.3f}")
+    if report.misses:
+        typer.echo("\nMissed queries:")
+        for query in report.misses:
+            typer.echo(f"  - {query}")
 
 
 @graph_app.command("build")

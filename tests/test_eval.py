@@ -7,7 +7,8 @@ from know_it_all_friend.eval.retrieval_eval import (
     write_eval_cases,
 )
 
-from tests.test_retrieval import KeywordEmbedder, _store
+from tests.conftest import KeywordEmbedder
+from tests.test_retrieval import _store
 
 
 def test_evaluate_retrieval_scores_hits_and_misses() -> None:

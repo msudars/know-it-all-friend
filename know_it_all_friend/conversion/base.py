@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from pathlib import Path
 
 
-class BaseConverter:
+class BaseConverter(ABC):
     """Interface every document-to-Markdown converter must implement.
 
     Callers depend only on this interface, never on a specific backend, so
@@ -13,5 +14,5 @@ class BaseConverter:
     without changing the conversion pipeline.
     """
 
-    def convert(self, path: str | Path) -> str:
-        raise NotImplementedError
+    @abstractmethod
+    def convert(self, path: str | Path) -> str: ...

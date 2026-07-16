@@ -9,6 +9,7 @@ always appear next to the retrieved evidence they were generated from.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import streamlit as st
@@ -20,9 +21,9 @@ from know_it_all_friend.rag.ollama_llm import DEFAULT_CHAT_MODEL, OllamaLLM
 from know_it_all_friend.retrieval.search import search_index
 from know_it_all_friend.vectorstore.local_store import LocalVectorStore
 
-METADATA_PATH = Path("storage/metadata/documents.json")
-ENTITIES_PATH = Path("storage/metadata/entities.json")
-INDEX_DIR = Path("storage/indexes/default")
+METADATA_PATH = Path(os.environ.get("KIAF_METADATA_PATH", "storage/metadata/documents.json"))
+ENTITIES_PATH = Path(os.environ.get("KIAF_ENTITIES_PATH", "storage/metadata/entities.json"))
+INDEX_DIR = Path(os.environ.get("KIAF_INDEX_DIR", "storage/indexes/default"))
 
 st.set_page_config(page_title="Know-it-all Friend", page_icon="📚", layout="wide")
 

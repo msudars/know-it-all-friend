@@ -10,26 +10,7 @@ from know_it_all_friend.enrichment.extractor import (
     write_entities,
 )
 from know_it_all_friend.metadata.extractor import DocumentMetadata
-from know_it_all_friend.rag.base import BaseLLM
-
-
-class CannedLLM(BaseLLM):
-    model = "canned-test"
-
-    def __init__(self, reply: str):
-        self.reply = reply
-        self.prompts: list[str] = []
-
-    def generate(self, prompt: str, system: str | None = None) -> str:
-        self.prompts.append(prompt)
-        return self.reply
-
-
-class FailingLLM(BaseLLM):
-    model = "failing-test"
-
-    def generate(self, prompt: str, system: str | None = None) -> str:
-        raise RuntimeError("simulated model failure")
+from tests.conftest import CannedLLM, FailingLLM
 
 
 def _doc(tmp_path: Path, markdown: str, doc_id: str = "document_001") -> DocumentMetadata:

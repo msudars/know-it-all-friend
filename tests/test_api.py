@@ -1,42 +1,12 @@
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from know_it_all_friend.api.app import create_app
-from know_it_all_friend.chunking.chunker import Chunk
-from know_it_all_friend.embeddings.base import BaseEmbedder
 from know_it_all_friend.metadata.extractor import DocumentMetadata, write_metadata
-from know_it_all_friend.rag.base import BaseLLM
 from know_it_all_friend.vectorstore.local_store import build_index
-
-
-class BagOfWordsEmbedder(BaseEmbedder):
-    model = "bag-of-words-test"
-    _vocabulary = ["alpha", "beta", "gamma", "delta"]
-
-    def embed_texts(self, texts: list[str]) -> list[list[float]]:
-        return [
-            [float(text.lower().split().count(word)) for word in self._vocabulary]
-            for text in texts
-        ]
-
-
-class CannedLLM(BaseLLM):
-    model = "canned-test"
-
-    def generate(self, prompt: str, system: str | None = None) -> str:
-        return "Canned answer [1]."
-
-
-def _chunk(chunk_id: str, text: str) -> Chunk:
-    return Chunk(
-        chunk_id=chunk_id,
-        document_id="document_001",
-        title="Example Report",
-        source_file="input/report.txt",
-        heading="Section",
-        text=text,
-    )
+from tests.conftest import BagOfWordsEmbedder, CannedLLM, make_chunk
 
 
 def _client(tmp_path: Path) -> TestClient:
@@ -55,7 +25,7 @@ def _client(tmp_path: Path) -> TestClient:
         ],
         metadata_path,
     )
-    store = build_index([_chunk("c1", "alpha facts"), _chunk("c2", "beta facts")], BagOfWordsEmbedder())
+    store = build_index([make_chunk("c1", "alpha facts"), make_chunk("c2", "beta facts")], BagOfWordsEmbedder())
     app = create_app(
         metadata_path=metadata_path,
         store=store,

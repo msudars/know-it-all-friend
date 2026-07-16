@@ -74,8 +74,10 @@ def write_graph(graph: dict, output_path: Path) -> None:
     logger.info("Wrote graph to %s", output_path)
 
 
+from typing import cast
+
 def load_graph(graph_path: Path) -> dict:
-    return json.loads(Path(graph_path).read_text(encoding="utf-8"))
+    return cast(dict, json.loads(Path(graph_path).read_text(encoding="utf-8")))
 
 
 def _resolve_entity(graph: dict, name: str) -> str | None:
@@ -85,7 +87,7 @@ def _resolve_entity(graph: dict, name: str) -> str | None:
     lowered = name.lower()
     for candidate in graph["entities"]:
         if candidate.lower() == lowered:
-            return candidate
+            return str(candidate)
     return None
 
 

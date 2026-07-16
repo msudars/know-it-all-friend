@@ -1,40 +1,15 @@
 from pathlib import Path
 
-from know_it_all_friend.chunking.chunker import Chunk
-from know_it_all_friend.embeddings.base import BaseEmbedder
 from know_it_all_friend.retrieval.search import search_index
 from know_it_all_friend.vectorstore.local_store import LocalVectorStore, build_index
-
-
-class BagOfWordsEmbedder(BaseEmbedder):
-    """Deterministic embedder so ranking is testable without a model server."""
-
-    model = "bag-of-words-test"
-    _vocabulary = ["alpha", "beta", "gamma", "delta"]
-
-    def embed_texts(self, texts: list[str]) -> list[list[float]]:
-        return [
-            [float(text.lower().split().count(word)) for word in self._vocabulary]
-            for text in texts
-        ]
-
-
-def _chunk(chunk_id: str, text: str, heading: str | None = "Section") -> Chunk:
-    return Chunk(
-        chunk_id=chunk_id,
-        document_id="document_001",
-        title="Example Report",
-        source_file="input/report.txt",
-        heading=heading,
-        text=text,
-    )
+from tests.conftest import BagOfWordsEmbedder, make_chunk
 
 
 def test_build_index_and_query_ranks_by_similarity() -> None:
     chunks = [
-        _chunk("c1", "alpha alpha alpha"),
-        _chunk("c2", "beta beta beta"),
-        _chunk("c3", "alpha beta"),
+        make_chunk("c1", "alpha alpha alpha"),
+        make_chunk("c2", "beta beta beta"),
+        make_chunk("c3", "alpha beta"),
     ]
     store = build_index(chunks, BagOfWordsEmbedder())
 
@@ -53,7 +28,7 @@ def test_query_on_empty_index_returns_nothing() -> None:
 
 
 def test_save_and_load_round_trip(tmp_path: Path) -> None:
-    chunks = [_chunk("c1", "alpha"), _chunk("c2", "beta")]
+    chunks = [make_chunk("c1", "alpha"), make_chunk("c2", "beta")]
     store = build_index(chunks, BagOfWordsEmbedder())
     index_dir = tmp_path / "index"
 
@@ -70,7 +45,7 @@ def test_save_and_load_round_trip(tmp_path: Path) -> None:
 
 
 def test_search_index_returns_traceable_results() -> None:
-    chunks = [_chunk("c1", "alpha alpha"), _chunk("c2", "gamma gamma")]
+    chunks = [make_chunk("c1", "alpha alpha"), make_chunk("c2", "gamma gamma")]
     store = build_index(chunks, BagOfWordsEmbedder())
 
     results = search_index("gamma", store, BagOfWordsEmbedder(), top_k=1)

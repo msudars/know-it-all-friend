@@ -13,10 +13,11 @@ import json
 import logging
 import re
 from dataclasses import asdict
+from typing import cast
 from pathlib import Path
 
 import numpy as np
-from rank_bm25 import BM25Okapi
+from rank_bm25 import BM25Okapi  # type: ignore[import-untyped]
 
 from know_it_all_friend.chunking.chunker import Chunk
 from know_it_all_friend.embeddings.base import BaseEmbedder

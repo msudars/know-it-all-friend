@@ -4,42 +4,10 @@ from __future__ import annotations
 
 import json
 import logging
+import typing
 from pathlib import Path
 
 import typer
-
-from know_it_all_friend.chunking.chunker import (
-    DEFAULT_MAX_CHARS,
-    DEFAULT_OVERLAP_CHARS,
-    chunk_documents,
-    load_chunks,
-    write_chunks,
-)
-from know_it_all_friend.conversion.markitdown_converter import MarkItDownConverter
-from know_it_all_friend.conversion.pipeline import convert_documents, write_conversion_log
-from know_it_all_friend.embeddings.ollama_embedder import DEFAULT_EMBED_MODEL, OllamaEmbedder
-from know_it_all_friend.enrichment.extractor import (
-    DEFAULT_MAX_CHARS as DEFAULT_ENRICH_MAX_CHARS,
-)
-from know_it_all_friend.enrichment.extractor import (
-    enrich_documents,
-    load_entities,
-    write_entities,
-)
-from know_it_all_friend.eval.retrieval_eval import evaluate_retrieval, load_eval_cases
-from know_it_all_friend.graph.builder import (
-    build_graph,
-    entities_of_document,
-    load_graph,
-    related_to_entity,
-    write_graph,
-)
-from know_it_all_friend.ingestion.inventory import DocumentRecord, build_manifest, write_manifest
-from know_it_all_friend.metadata.extractor import build_document_metadata, load_metadata, write_metadata
-from know_it_all_friend.rag.answer import answer_question, answer_question_stream
-from know_it_all_friend.rag.ollama_llm import DEFAULT_CHAT_MODEL, OllamaLLM
-from know_it_all_friend.retrieval.search import search_index
-from know_it_all_friend.vectorstore.local_store import LocalVectorStore, build_index
 
 app = typer.Typer(help="Know-it-all Friend: turn document collections into a knowledge base.")
 graph_app = typer.Typer(help="Build and explore the knowledge graph (Phase 12).")
@@ -60,6 +28,8 @@ def inventory(
     ),
 ) -> None:
     """Scan a directory and write a document manifest (Phase 1)."""
+    from know_it_all_friend.ingestion.inventory import build_manifest, write_manifest
+
     records = build_manifest(input_dir, recursive=recursive, include_system_files=include_system_files)
     write_manifest(records, output)
     typer.echo(f"Discovered {len(records)} document(s). Manifest written to {output}")
@@ -78,6 +48,10 @@ def convert(
     ),
 ) -> None:
     """Convert every document in a manifest to Markdown (Phase 2)."""
+    from know_it_all_friend.conversion.markitdown_converter import MarkItDownConverter
+    from know_it_all_friend.conversion.pipeline import convert_documents, write_conversion_log
+    from know_it_all_friend.ingestion.inventory import DocumentRecord
+
     records = [DocumentRecord(**r) for r in json.loads(manifest.read_text(encoding="utf-8"))]
     converter = MarkItDownConverter()
     results = convert_documents(records, converter, output)
@@ -101,6 +75,9 @@ def metadata(
     ),
 ) -> None:
     """Extract per-document metadata from converted Markdown (Phase 3)."""
+    from know_it_all_friend.ingestion.inventory import DocumentRecord
+    from know_it_all_friend.metadata.extractor import build_document_metadata, write_metadata
+
     records = [DocumentRecord(**r) for r in json.loads(manifest.read_text(encoding="utf-8"))]
     conversion_log = json.loads(log.read_text(encoding="utf-8"))
     docs = build_document_metadata(records, conversion_log)
@@ -116,13 +93,17 @@ def enrich(
     output: Path = typer.Option(
         Path("storage/metadata/entities.json"), "--output", "-o", help="Where to write the extracted entities."
     ),
-    model: str = typer.Option(DEFAULT_CHAT_MODEL, help="Ollama chat model for entity extraction."),
+    model: str = typer.Option("llama3.2", help="Ollama chat model for entity extraction."),  # keep in sync with rag.ollama_llm.DEFAULT_CHAT_MODEL
     max_chars: int = typer.Option(
-        DEFAULT_ENRICH_MAX_CHARS, help="How much of each document to send to the model."
+        8000, help="How much of each document to send to the model."  # keep in sync with enrichment.extractor.DEFAULT_MAX_CHARS
     ),
     host: str = typer.Option(None, help="Ollama host (defaults to OLLAMA_HOST or localhost)."),
 ) -> None:
     """Extract entities and topics from each document (Phase 4)."""
+    from know_it_all_friend.enrichment.extractor import enrich_documents, write_entities
+    from know_it_all_friend.metadata.extractor import load_metadata
+    from know_it_all_friend.rag.ollama_llm import OllamaLLM
+
     docs = load_metadata(metadata_file)
     llm = OllamaLLM(model=model, host=host)
     enriched = enrich_documents(docs, llm, max_chars=max_chars)
@@ -140,12 +121,15 @@ def chunk(
     output: Path = typer.Option(
         Path("storage/chunks/chunks.json"), "--output", "-o", help="Where to write the chunks."
     ),
-    max_chars: int = typer.Option(DEFAULT_MAX_CHARS, help="Maximum characters per chunk."),
+    max_chars: int = typer.Option(1500, help="Maximum characters per chunk."),  # keep in sync with chunking.chunker.DEFAULT_MAX_CHARS
     overlap_chars: int = typer.Option(
-        DEFAULT_OVERLAP_CHARS, help="Characters of trailing context carried into the next chunk."
+        200, help="Characters of trailing context carried into the next chunk."  # keep in sync with chunking.chunker.DEFAULT_OVERLAP_CHARS
     ),
 ) -> None:
     """Split Markdown documents into retrievable chunks (Phase 5)."""
+    from know_it_all_friend.chunking.chunker import chunk_documents, write_chunks
+    from know_it_all_friend.metadata.extractor import load_metadata
+
     docs = load_metadata(metadata_file)
     chunks = chunk_documents(docs, max_chars=max_chars, overlap_chars=overlap_chars)
     write_chunks(chunks, output)
@@ -160,10 +144,14 @@ def index(
     output: Path = typer.Option(
         Path("storage/indexes/default"), "--output", "-o", help="Directory to write the vector index."
     ),
-    embed_model: str = typer.Option(DEFAULT_EMBED_MODEL, help="Ollama embedding model to use."),
+    embed_model: str = typer.Option("nomic-embed-text", help="Ollama embedding model to use."),  # keep in sync with embeddings.ollama_embedder.DEFAULT_EMBED_MODEL
     host: str = typer.Option(None, help="Ollama host (defaults to OLLAMA_HOST or localhost)."),
 ) -> None:
     """Embed chunks with a local Ollama model and build the vector index (Phases 6-7)."""
+    from know_it_all_friend.chunking.chunker import load_chunks
+    from know_it_all_friend.embeddings.ollama_embedder import OllamaEmbedder
+    from know_it_all_friend.vectorstore.local_store import build_index
+
     chunks = load_chunks(chunks_file)
     embedder = OllamaEmbedder(model=embed_model, host=host)
     store = build_index(chunks, embedder)
@@ -191,6 +179,10 @@ def search(
     host: str = typer.Option(None, help="Ollama host (defaults to OLLAMA_HOST or localhost)."),
 ) -> None:
     """Semantic search over the indexed chunks (Phase 8)."""
+    from know_it_all_friend.embeddings.ollama_embedder import OllamaEmbedder
+    from know_it_all_friend.retrieval.search import search_index
+    from know_it_all_friend.vectorstore.local_store import LocalVectorStore
+
     store = LocalVectorStore.load(index_dir)
     embedder = OllamaEmbedder(model=store.embedding_model, host=host)
     results = search_index(
@@ -198,7 +190,7 @@ def search(
         store,
         embedder,
         top_k=top_k,
-        mode=mode,
+        mode=typing.cast(typing.Literal["vector", "hybrid"], mode),
         alpha=alpha,
         score_threshold=score_threshold,
         diversify=diversify,
@@ -221,12 +213,17 @@ def ask(
     index_dir: Path = typer.Option(
         Path("storage/indexes/default"), "--index", help="Index directory produced by `kiaf index`."
     ),
-    model: str = typer.Option(DEFAULT_CHAT_MODEL, help="Ollama chat model to generate the answer."),
+    model: str = typer.Option("llama3.2", help="Ollama chat model to generate the answer."),  # keep in sync with rag.ollama_llm.DEFAULT_CHAT_MODEL
     top_k: int = typer.Option(5, help="Number of chunks to retrieve as context."),
     stream: bool = typer.Option(False, help="Print the answer incrementally as it's generated."),
     host: str = typer.Option(None, help="Ollama host (defaults to OLLAMA_HOST or localhost)."),
 ) -> None:
     """Answer a question from retrieved context, with citations (Phase 9)."""
+    from know_it_all_friend.embeddings.ollama_embedder import OllamaEmbedder
+    from know_it_all_friend.rag.answer import answer_question, answer_question_stream
+    from know_it_all_friend.rag.ollama_llm import OllamaLLM
+    from know_it_all_friend.vectorstore.local_store import LocalVectorStore
+
     store = LocalVectorStore.load(index_dir)
     embedder = OllamaEmbedder(model=store.embedding_model, host=host)
     llm = OllamaLLM(model=model, host=host)
@@ -265,6 +262,10 @@ def eval_retrieval(
     host: str = typer.Option(None, help="Ollama host (defaults to OLLAMA_HOST or localhost)."),
 ) -> None:
     """Measure retrieval quality (hit-rate@k, MRR) against labeled queries."""
+    from know_it_all_friend.embeddings.ollama_embedder import OllamaEmbedder
+    from know_it_all_friend.eval.retrieval_eval import evaluate_retrieval, load_eval_cases
+    from know_it_all_friend.vectorstore.local_store import LocalVectorStore
+
     cases = load_eval_cases(cases_file)
     store = LocalVectorStore.load(index_dir)
     embedder = OllamaEmbedder(model=store.embedding_model, host=host)
@@ -292,6 +293,10 @@ def graph_build(
     ),
 ) -> None:
     """Build the knowledge graph from extracted entities (Phase 12)."""
+    from know_it_all_friend.enrichment.extractor import load_entities
+    from know_it_all_friend.graph.builder import build_graph, write_graph
+    from know_it_all_friend.metadata.extractor import load_metadata
+
     docs = load_metadata(metadata_file)
     enriched = load_entities(entities_file)
     graph = build_graph(docs, enriched)
@@ -311,6 +316,8 @@ def graph_related(
     top: int = typer.Option(10, help="How many related entities to show."),
 ) -> None:
     """Show the documents and entities related to an entity."""
+    from know_it_all_friend.graph.builder import load_graph, related_to_entity
+
     related = related_to_entity(load_graph(graph_file), name)
     if related is None:
         typer.echo(f"Entity not found in the graph: {name!r}")
@@ -333,6 +340,8 @@ def graph_doc(
     ),
 ) -> None:
     """Show the entities mentioned in a document."""
+    from know_it_all_friend.graph.builder import load_graph, entities_of_document
+
     graph = load_graph(graph_file)
     grouped = entities_of_document(graph, document_id)
     if grouped is None:
@@ -355,7 +364,7 @@ def serve(
     index_dir: Path = typer.Option(
         Path("storage/indexes/default"), "--index", help="Index directory produced by `kiaf index`."
     ),
-    model: str = typer.Option(DEFAULT_CHAT_MODEL, help="Ollama chat model for /ask."),
+    model: str = typer.Option("llama3.2", help="Ollama chat model for /ask."),  # keep in sync with rag.ollama_llm.DEFAULT_CHAT_MODEL
     host: str = typer.Option(None, help="Ollama host (defaults to OLLAMA_HOST or localhost)."),
 ) -> None:
     """Serve the knowledge base over a REST API (Phase 11)."""
@@ -376,18 +385,34 @@ def serve(
 @app.command()
 def ui(
     port: int = typer.Option(8501, help="Port to serve the web UI on."),
+    metadata_file: Path = typer.Option(
+        Path("storage/metadata/documents.json"), "--metadata", help="Metadata index."
+    ),
+    entities_file: Path = typer.Option(
+        Path("storage/metadata/entities.json"), "--entities", help="Entities file."
+    ),
+    index_dir: Path = typer.Option(
+        Path("storage/indexes/default"), "--index", help="Index directory."
+    ),
 ) -> None:
     """Launch the Streamlit knowledge explorer (Phase 11)."""
+    import os
     import subprocess
     import sys
 
     import know_it_all_friend.ui as ui_package
+
+    env = os.environ.copy()
+    env["KIAF_METADATA_PATH"] = str(metadata_file)
+    env["KIAF_ENTITIES_PATH"] = str(entities_file)
+    env["KIAF_INDEX_DIR"] = str(index_dir)
 
     app_path = Path(ui_package.__file__).parent / "app.py"
     typer.echo(f"Launching knowledge explorer on http://localhost:{port}")
     subprocess.run(
         [sys.executable, "-m", "streamlit", "run", str(app_path), "--server.port", str(port)],
         check=True,
+        env=env,
     )
 
 

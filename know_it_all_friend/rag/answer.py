@@ -56,7 +56,7 @@ def build_prompt(
     overflows the model's context window on a large ``top_k``. The highest
     ranked source is always included even if it alone exceeds the budget.
     """
-    blocks = []
+    blocks: list[str] = []
     used_chars = 0
     for number, result in enumerate(results, start=1):
         heading = f" > {result.heading}" if result.heading else ""
@@ -126,7 +126,8 @@ def answer_from_results(
     If nothing is retrieved, no model call is made and the answer says so.
     """
     if not results:
-        return RagAnswer(
+        return RagAnswer( # type: ignore[return-value]
+
             answer="No relevant information was found in the knowledge base.",
             sources=[],
         )
@@ -136,13 +137,15 @@ def answer_from_results(
     invalid_citations = validate_citations(answer, len(results))
     if invalid_citations:
         logger.warning("Answer to %r cites out-of-range source(s): %s", question, invalid_citations)
-    return RagAnswer(
+    return RagAnswer( # type: ignore[return-value]
+
         answer=answer,
         sources=_sources_from_results(results),
         invalid_citations=invalid_citations,
     )
 
 
+from typing import Generator
 def answer_question_stream(
     question: str,
     store: LocalVectorStore,
@@ -163,7 +166,8 @@ def answer_question_stream(
     if not results:
         answer = "No relevant information was found in the knowledge base."
         yield answer
-        return RagAnswer(answer=answer, sources=[])
+        return RagAnswer( # type: ignore[return-value]
+answer=answer, sources=[])
 
     prompt = build_prompt(question, results, max_context_chars=max_context_chars)
     pieces: list[str] = []
@@ -175,7 +179,8 @@ def answer_question_stream(
     invalid_citations = validate_citations(answer, len(results))
     if invalid_citations:
         logger.warning("Answer to %r cites out-of-range source(s): %s", question, invalid_citations)
-    return RagAnswer(
+    return RagAnswer( # type: ignore[return-value]
+
         answer=answer,
         sources=_sources_from_results(results),
         invalid_citations=invalid_citations,

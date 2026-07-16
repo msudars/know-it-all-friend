@@ -2,43 +2,16 @@ from pathlib import Path
 
 import pytest
 
-from know_it_all_friend.chunking.chunker import Chunk
-from know_it_all_friend.embeddings.base import BaseEmbedder
 from know_it_all_friend.retrieval.search import search_index
 from know_it_all_friend.vectorstore.local_store import LocalVectorStore, build_index
-
-VOCAB = ["alpha", "beta", "gamma", "delta"]
-
-
-class KeywordEmbedder(BaseEmbedder):
-    """Deterministic stand-in embedder: counts occurrences of a fixed vocabulary.
-
-    Texts sharing keywords get similar vectors, so retrieval behaves
-    sensibly in tests without a real model or a running Ollama server.
-    """
-
-    model = "keyword-test-embedder"
-
-    def embed_texts(self, texts: list[str]) -> list[list[float]]:
-        return [[float(text.lower().count(word)) for word in VOCAB] for text in texts]
-
-
-def _chunk(chunk_id: str, text: str) -> Chunk:
-    return Chunk(
-        chunk_id=chunk_id,
-        document_id=chunk_id.rsplit("_chunk_", 1)[0],
-        title="Example",
-        source_file="input/example.txt",
-        heading="Section",
-        text=text,
-    )
+from tests.conftest import KeywordEmbedder, make_chunk
 
 
 def _store() -> LocalVectorStore:
     chunks = [
-        _chunk("document_001_chunk_0000", "all about alpha and alpha again"),
-        _chunk("document_001_chunk_0001", "this one covers beta"),
-        _chunk("document_002_chunk_0000", "gamma and delta together"),
+        make_chunk("document_001_chunk_0000", "all about alpha and alpha again"),
+        make_chunk("document_001_chunk_0001", "this one covers beta"),
+        make_chunk("document_002_chunk_0000", "gamma and delta together"),
     ]
     return build_index(chunks, KeywordEmbedder())
 
@@ -90,9 +63,9 @@ def test_hybrid_mode_finds_exact_term_vector_search_misses() -> None:
     zero you get when a term sits in exactly half of a 2-document corpus.
     """
     chunks = [
-        _chunk("document_001_chunk_0000", "the quarterly report mentions project zephyr by name"),
-        _chunk("document_002_chunk_0000", "an unrelated memo about scheduling and logistics"),
-        _chunk("document_003_chunk_0000", "notes from the weekly standup meeting"),
+        make_chunk("document_001_chunk_0000", "the quarterly report mentions project zephyr by name"),
+        make_chunk("document_002_chunk_0000", "an unrelated memo about scheduling and logistics"),
+        make_chunk("document_003_chunk_0000", "notes from the weekly standup meeting"),
     ]
     store = build_index(chunks, KeywordEmbedder())
 
@@ -128,9 +101,9 @@ def test_filter_document_ids_restricts_results_to_named_documents() -> None:
 
 def test_diversify_prefers_distinct_chunks_over_near_duplicates() -> None:
     chunks = [
-        _chunk("document_001_chunk_0000", "alpha alpha alpha beta"),
-        _chunk("document_001_chunk_0001", "alpha alpha alpha beta"),  # near-duplicate of the above
-        _chunk("document_002_chunk_0000", "alpha gamma gamma"),
+        make_chunk("document_001_chunk_0000", "alpha alpha alpha beta"),
+        make_chunk("document_001_chunk_0001", "alpha alpha alpha beta"),  # near-duplicate of the above
+        make_chunk("document_002_chunk_0000", "alpha gamma gamma"),
     ]
     store = build_index(chunks, KeywordEmbedder())
 

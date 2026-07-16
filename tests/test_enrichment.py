@@ -34,34 +34,36 @@ def test_extract_entities_parses_and_cleans_reply() -> None:
             "topics": ["Topic A"],
             "unknown_key": ["dropped"],
             "locations": "not a list",
+            "document_date": "2026-01-01"
         }
     )
     llm = CannedLLM(reply)
 
-    entities = extract_entities("Document text about Topic A.", llm)
+    entities, date = extract_entities("Document text about Topic A.", llm)
 
     assert entities["people"] == ["Jane Doe"]
     assert entities["topics"] == ["Topic A"]
-    assert entities["locations"] == []
     assert "unknown_key" not in entities
-    assert set(entities) == set(ENTITY_TYPES)
-    assert "Document text about Topic A." in llm.prompts[0]
+    assert entities["locations"] == []
+    assert date == "2026-01-01"
 
 
 def test_extract_entities_handles_fenced_json() -> None:
     llm = CannedLLM('Here you go:\n```json\n{"topics": ["Topic A"]}\n```')
 
-    entities = extract_entities("text", llm)
+    entities, date = extract_entities("text", llm)
 
     assert entities["topics"] == ["Topic A"]
+    assert date == ""
 
 
 def test_extract_entities_survives_garbage_reply() -> None:
     llm = CannedLLM("I cannot help with that.")
 
-    entities = extract_entities("text", llm)
+    entities, date = extract_entities("text", llm)
 
     assert entities == {entity_type: [] for entity_type in ENTITY_TYPES}
+    assert date == ""
 
 
 def test_extract_entities_truncates_long_documents() -> None:

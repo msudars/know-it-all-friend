@@ -30,10 +30,15 @@ DEFAULT_INDEX_DIR = Path("storage/indexes/default")
 class AskRequest(BaseModel):
     question: str
     top_k: int = 5
+    start_date: str | None = None
+    end_date: str | None = None
 
+
+DEFAULT_ENTITIES_PATH = Path("storage/metadata/entities.json")
 
 def create_app(
     metadata_path: Path = DEFAULT_METADATA_PATH,
+    entities_path: Path = DEFAULT_ENTITIES_PATH,
     index_dir: Path = DEFAULT_INDEX_DIR,
     store: LocalVectorStore | None = None,
     embedder: BaseEmbedder | None = None,
@@ -71,6 +76,34 @@ def create_app(
             state["llm"] = OllamaLLM(model=chat_model or DEFAULT_CHAT_MODEL, host=ollama_host)
         return state["llm"]
 
+    def _get_date_filter(start_date: str | None, end_date: str | None) -> set[str] | None:
+        if not start_date and not end_date:
+            return None
+        from know_it_all_friend.enrichment.extractor import load_entities
+        if "entities" not in state:
+            if not Path(entities_path).exists():
+                state["entities"] = []
+            else:
+                state["entities"] = load_entities(entities_path)
+        
+        valid = set()
+        for e in state["entities"]:
+            date = getattr(e, "document_date", "")
+            if not date:
+                continue
+            if start_date and date < start_date:
+                continue
+            if end_date and date > end_date:
+                continue
+            valid.add(e.document_id)
+        return valid
+
+    from fastapi.responses import RedirectResponse
+
+    @app.get("/", include_in_schema=False)
+    def root() -> RedirectResponse:
+        return RedirectResponse(url="/docs")
+
     @app.get("/health")
     def health() -> dict:
         return {"status": "ok"}
@@ -87,14 +120,18 @@ def create_app(
     def search(
         q: str = Query(..., min_length=1, description="Natural-language search query."),
         top_k: int = Query(5, ge=1, le=50),
+        start_date: str | None = Query(None, description="Filter by document date (YYYY-MM-DD)."),
+        end_date: str | None = Query(None, description="Filter by document date (YYYY-MM-DD)."),
     ) -> list[dict]:
-        results = search_index(q, get_store(), get_embedder(), top_k=top_k)
+        filter_ids = _get_date_filter(start_date, end_date)
+        results = search_index(q, get_store(), get_embedder(), top_k=top_k, filter_document_ids=filter_ids)
         return [asdict(r) for r in results]
 
     @app.post("/ask")
     def ask(request: AskRequest) -> dict:
+        filter_ids = _get_date_filter(request.start_date, request.end_date)
         result = answer_question(
-            request.question, get_store(), get_embedder(), get_llm(), top_k=request.top_k
+            request.question, get_store(), get_embedder(), get_llm(), top_k=request.top_k, filter_document_ids=filter_ids
         )
         return {"answer": result.answer, "sources": [asdict(s) for s in result.sources]}
 

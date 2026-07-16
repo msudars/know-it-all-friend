@@ -35,8 +35,9 @@ def build_graph(
     mentioned in the same document, weighted by how many documents share
     them.
     """
+    dates = {e.document_id: getattr(e, "document_date", "") for e in enriched}
     documents = {
-        doc.document_id: {"title": doc.title, "source_file": doc.source_file} for doc in docs
+        doc.document_id: {"title": doc.title, "source_file": doc.source_file, "document_date": dates.get(doc.document_id, "")} for doc in docs
     }
 
     entities: dict[str, dict] = {}

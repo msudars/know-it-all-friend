@@ -104,9 +104,10 @@ def answer_question(
     llm: BaseLLM,
     top_k: int = 5,
     max_context_chars: int = DEFAULT_MAX_CONTEXT_CHARS,
+    filter_document_ids: set[str] | None = None,
 ) -> RagAnswer:
     """Answer ``question`` from retrieved context, with source attribution."""
-    results = search_index(question, store, embedder, top_k=top_k)
+    results = search_index(question, store, embedder, top_k=top_k, filter_document_ids=filter_document_ids)
     return answer_from_results(question, results, llm, max_context_chars=max_context_chars)
 
 

@@ -56,12 +56,13 @@ Available today:
 - Document conversion to Markdown
 - Metadata extraction
 - Markdown repository creation
-- LLM-based entity and topic extraction
+- LLM-based entity, topic, and true document date extraction
 - Heading-aware document chunking with word-boundary-safe overlap between consecutive chunks
 - Embedding generation (local, via Ollama)
 - On-disk vector index
-- Semantic search, with optional BM25 hybrid keyword search, MMR result diversification, score thresholds, and document-ID filtering
+- Semantic search, with optional BM25 hybrid keyword search, MMR result diversification, score thresholds, document-ID filtering, and date-range filtering
 - Retrieval-augmented question answering with source citations, out-of-range citation detection, and streaming answers
+- Document deduplication and intelligent versioning (archiving older versions)
 - Retrieval quality evaluation harness (hit-rate@k, MRR) against labeled queries
 - Content-hash based document staleness detection
 - Knowledge graph over documents and entities
@@ -100,6 +101,17 @@ Examples in this repository should use neutral placeholders such as:
 - Document A
 
 Avoid adding proprietary, organization-specific, or domain-specific terminology to public examples.
+
+---
+
+## Target Niches & Vision
+
+While Know-it-all Friend can be used by anyone, its local-first, privacy-focused architecture makes it especially powerful as a **Secure, Air-Gapped Knowledge Engine** for privacy-constrained professionals:
+
+- **Legal & Compliance:** Query case files, NDAs, and contracts without uploading sensitive client data to public cloud AI.
+- **Investigative Journalism:** Connect dots across gigabytes of leaked documents securely.
+- **Corporate R&D / Hardware Engineering:** Cross-reference decades of internal R&D PDFs to prevent repeating failed experiments.
+- **Offline / Remote Workers:** Instant access to troubleshooting manuals in zero-internet environments.
 
 ---
 
@@ -261,7 +273,7 @@ Joins the manifest with the conversion log and the converted Markdown to produce
 }
 ```
 
-The title comes from the first Markdown heading, falling back to the filename. Documents whose conversion failed are skipped (they have no Markdown to work with) without blocking the rest.
+The title comes from the first Markdown heading, falling back to the filename. Documents whose conversion failed are skipped. This step also performs exact content deduplication and filename-based version pruning, keeping only the newest version active and flagging the rest as archived so they don't bloat the vector index.
 
 ### Step 5: Chunk documents
 
@@ -314,7 +326,7 @@ uv run kiaf graph related "Topic A"
 uv run kiaf graph doc document_001
 ```
 
-`kiaf enrich` extracts typed entities (people, organizations, projects, products, datasets, technologies, publications, locations, topics) from each document with the local chat model, writing `storage/metadata/entities.json`. `kiaf graph build` turns those into `storage/metadata/graph.json` — document→entity mentions plus entity↔entity co-occurrence edges weighted by shared documents — which `kiaf graph related` and `kiaf graph doc` explore from the command line.
+`kiaf enrich` extracts typed entities (people, organizations, projects, products, datasets, technologies, publications, locations, topics) and the true document creation/publication date from each document with the local chat model, writing `storage/metadata/entities.json`. `kiaf graph build` turns those into `storage/metadata/graph.json` — a time-aware mapping of document→entity mentions plus entity↔entity co-occurrence edges weighted by shared documents — which `kiaf graph related` and `kiaf graph doc` explore from the command line.
 
 ### Step 10: Serve the REST API
 
@@ -324,7 +336,7 @@ Available now:
 uv run kiaf serve
 ```
 
-Exposes the knowledge base as JSON on `http://127.0.0.1:8000` (interactive docs at `/docs`): `GET /documents`, `GET /search?q=...`, `POST /ask`, `GET /health`. Backends are pluggable, so other frontends can build on this without touching the pipeline.
+Exposes the knowledge base as JSON on `http://127.0.0.1:8000` (interactive docs at `/docs`): `GET /documents`, `GET /search?q=...&start_date=...`, `POST /ask`, `GET /health`. Accessing the root (`/`) automatically redirects to `/docs`. Backends are pluggable, so other frontends can build on this without touching the pipeline.
 
 ### Step 11: Explore in the web UI
 

@@ -30,6 +30,7 @@ class DocumentMetadata:
     # supply them; real documents get both from build_document_metadata.
     content_hash: str = ""
     modified_at: str = ""
+    archived: bool = False
 
 
 def extract_title(markdown_text: str) -> str | None:
@@ -105,9 +106,35 @@ def build_document_metadata(
             word_count=len(markdown_text.split()),
             content_hash=hashlib.sha256(markdown_text.encode("utf-8")).hexdigest(),
             modified_at=_source_modified_at(record.path),
+            archived=False,
         )
         docs.append(doc)
         logger.info("Extracted metadata for %s: %r (%d words)", record.id, doc.title, doc.word_count)
+
+    def normalize_name(name: str) -> str:
+        return re.sub(r'(_v\d+|-v\d+|_final|-final|\(\d+\)|\s*\d+)$', '', name, flags=re.IGNORECASE).strip()
+
+    seen_hashes: set[str] = set()
+    groups: dict[str, list[tuple[int, DocumentMetadata]]] = {}
+    
+    for i, doc in enumerate(docs):
+        # 1. Exact duplicates
+        if doc.content_hash in seen_hashes:
+            docs[i] = DocumentMetadata(**{**asdict(doc), "archived": True})
+            continue
+        seen_hashes.add(doc.content_hash)
+        
+        # 2. Versioning
+        norm = normalize_name(Path(doc.source_file).stem)
+        groups.setdefault(norm, []).append((i, doc))
+        
+    for norm, group in groups.items():
+        if len(group) > 1:
+            group.sort(key=lambda x: x[1].modified_at, reverse=True)
+            for i, doc in group[1:]:
+                if not doc.archived:
+                    docs[i] = DocumentMetadata(**{**asdict(doc), "archived": True})
+                    logger.info("Archived older version %s (superceded by %s)", doc.document_id, group[0][1].document_id)
 
     return docs
 

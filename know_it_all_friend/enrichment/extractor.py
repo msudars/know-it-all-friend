@@ -39,36 +39,32 @@ SYSTEM_PROMPT = (
 class DocumentEntities:
     document_id: str
     entities: dict[str, list[str]]
+    document_date: str = ""
 
 
 def build_enrichment_prompt(text: str) -> str:
     keys = ", ".join(f'"{t}"' for t in ENTITY_TYPES)
     return (
         f"Extract the entities mentioned in the document below into a JSON object "
-        f"with exactly these keys: {keys}. Each value is a list of distinct strings; "
+        f"with exactly these keys: {keys}, plus a key \"document_date\". Each entity value is a list of distinct strings; "
         f"use an empty list when nothing of that type is mentioned. "
+        f"For \"document_date\", provide the publication, creation, or effective date of the document as a string in YYYY-MM-DD format (or an empty string if none is found). "
         f"Do not invent entities that are not in the text.\n\n"
         f"Document:\n{text}"
     )
 
 
-def _parse_entities(response: str) -> dict[str, list[str]]:
-    """Parse the model's JSON reply into a clean entity mapping.
-
-    Local models occasionally wrap JSON in prose or code fences, so parsing
-    starts at the first ``{`` and ends at the last ``}``. Unknown keys and
-    non-string values are dropped; values are deduplicated preserving order.
-    An unparseable reply yields an empty mapping rather than an error.
-    """
+def _parse_entities(response: str) -> tuple[dict[str, list[str]], str]:
+    """Parse the model's JSON reply into a clean entity mapping and document date."""
     start, end = response.find("{"), response.rfind("}")
     if start == -1 or end <= start:
         logger.warning("Entity reply contained no JSON object")
-        return {entity_type: [] for entity_type in ENTITY_TYPES}
+        return {entity_type: [] for entity_type in ENTITY_TYPES}, ""
     try:
         raw = json.loads(response[start : end + 1])
     except json.JSONDecodeError as exc:
         logger.warning("Could not parse entity reply as JSON: %s", exc)
-        return {entity_type: [] for entity_type in ENTITY_TYPES}
+        return {entity_type: [] for entity_type in ENTITY_TYPES}, ""
 
     entities: dict[str, list[str]] = {}
     for entity_type in ENTITY_TYPES:
@@ -80,15 +76,19 @@ def _parse_entities(response: str) -> dict[str, list[str]]:
             if isinstance(value, str) and (cleaned := " ".join(value.split())) and cleaned not in seen:
                 seen.append(cleaned)
         entities[entity_type] = seen
-    return entities
+        
+    doc_date = raw.get("document_date", "")
+    if not isinstance(doc_date, str):
+        doc_date = ""
+    return entities, doc_date
 
 
 def extract_entities(
     markdown_text: str,
     llm: BaseLLM,
     max_chars: int = DEFAULT_MAX_CHARS,
-) -> dict[str, list[str]]:
-    """Extract typed entities from one document's Markdown via the LLM."""
+) -> tuple[dict[str, list[str]], str]:
+    """Extract typed entities and date from one document's Markdown via the LLM."""
     response = llm.generate(build_enrichment_prompt(markdown_text[:max_chars]), system=SYSTEM_PROMPT)
     return _parse_entities(response)
 
@@ -107,13 +107,13 @@ def enrich_documents(
     for doc in docs:
         try:
             markdown_text = Path(doc.markdown_file).read_text(encoding="utf-8")
-            entities = extract_entities(markdown_text, llm, max_chars=max_chars)
+            entities, doc_date = extract_entities(markdown_text, llm, max_chars=max_chars)
         except Exception as exc:  # noqa: BLE001 - must not abort the batch
             logger.warning("Skipping %s: enrichment failed: %s", doc.document_id, exc)
             continue
-        enriched.append(DocumentEntities(document_id=doc.document_id, entities=entities))
+        enriched.append(DocumentEntities(document_id=doc.document_id, entities=entities, document_date=doc_date))
         found = sum(len(v) for v in entities.values())
-        logger.info("Enriched %s: %d entit(ies)", doc.document_id, found)
+        logger.info("Enriched %s: %d entit(ies), date=%s", doc.document_id, found, doc_date)
     return enriched
 
 

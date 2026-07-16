@@ -416,5 +416,15 @@ def ui(
     )
 
 
+@app.command()
+def watch(
+    input_dir: Path = typer.Argument(..., help="Directory of source documents to watch."),
+) -> None:
+    """Watch a directory and auto-run the ingestion pipeline on changes."""
+    from know_it_all_friend.watcher import start_watcher
+
+    start_watcher(str(input_dir))
+
+
 if __name__ == "__main__":
     app()

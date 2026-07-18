@@ -9,6 +9,8 @@ from pathlib import Path
 
 import typer
 
+from know_it_all_friend import paths
+
 app = typer.Typer(help="Know-it-all Friend: turn document collections into a knowledge base.")
 graph_app = typer.Typer(help="Build and explore the knowledge graph (Phase 12).")
 app.add_typer(graph_app, name="graph")
@@ -16,11 +18,46 @@ app.add_typer(graph_app, name="graph")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
 
+def run_ingest(
+    input_dir: Path,
+    embed_model: str = "nomic-embed-text",
+    model: str = "llama3.2",
+    host: str | None = None,
+    enrich_docs: bool = True,
+) -> None:
+    """Run the whole pipeline in-process. Shared by `kiaf ingest` and the folder watcher."""
+    inventory(input_dir=input_dir, output=paths.MANIFEST, recursive=True, include_system_files=False)
+    convert(manifest=paths.MANIFEST, output=paths.MARKDOWN_DIR, log=paths.CONVERSION_LOG)
+    metadata(manifest=paths.MANIFEST, log=paths.CONVERSION_LOG, output=paths.DOCUMENTS)
+    chunk(metadata_file=paths.DOCUMENTS, output=paths.CHUNKS, max_chars=1500, overlap_chars=200)
+    index(chunks_file=paths.CHUNKS, output=paths.INDEX_DIR, embed_model=embed_model, host=host)
+    if enrich_docs:
+        enrich(metadata_file=paths.DOCUMENTS, output=paths.ENTITIES, model=model, max_chars=8000, host=host)
+        graph_build(metadata_file=paths.DOCUMENTS, entities_file=paths.ENTITIES, output=paths.GRAPH)
+
+
+@app.command()
+def ingest(
+    input_dir: Path = typer.Argument(..., help="Directory of source documents to ingest."),
+    embed_model: str = typer.Option("nomic-embed-text", help="Ollama embedding model to use."),
+    model: str = typer.Option("llama3.2", help="Ollama chat model for entity extraction."),
+    host: str | None = typer.Option(None, help="Ollama host (defaults to OLLAMA_HOST or localhost)."),
+    enrich_entities: bool = typer.Option(
+        True,
+        "--enrich/--no-enrich",
+        help="Extract entities and build the knowledge graph (slowest step; needs the chat model).",
+    ),
+) -> None:
+    """Build the knowledge base in one command: inventory → convert → metadata → chunk → index → enrich → graph."""
+    run_ingest(input_dir, embed_model=embed_model, model=model, host=host, enrich_docs=enrich_entities)
+    typer.echo(f'\nKnowledge base ready in {paths.storage_root().resolve()}. Try: kiaf ask "your question"')
+
+
 @app.command()
 def inventory(
     input_dir: Path = typer.Argument(..., help="Directory of source documents to scan."),
     output: Path = typer.Option(
-        Path("storage/metadata/manifest.json"), "--output", "-o", help="Where to write the manifest."
+        paths.MANIFEST, "--output", "-o", help="Where to write the manifest."
     ),
     recursive: bool = typer.Option(True, help="Recurse into subdirectories."),
     include_system_files: bool = typer.Option(
@@ -38,13 +75,13 @@ def inventory(
 @app.command()
 def convert(
     manifest: Path = typer.Option(
-        Path("storage/metadata/manifest.json"), "--manifest", "-m", help="Manifest produced by `kiaf inventory`."
+        paths.MANIFEST, "--manifest", "-m", help="Manifest produced by `kiaf inventory`."
     ),
     output: Path = typer.Option(
-        Path("storage/markdown"), "--output", "-o", help="Directory to write converted Markdown files."
+        paths.MARKDOWN_DIR, "--output", "-o", help="Directory to write converted Markdown files."
     ),
     log: Path = typer.Option(
-        Path("storage/metadata/conversion_log.json"), "--log", help="Where to write the conversion status log."
+        paths.CONVERSION_LOG, "--log", help="Where to write the conversion status log."
     ),
 ) -> None:
     """Convert every document in a manifest to Markdown (Phase 2)."""
@@ -65,13 +102,13 @@ def convert(
 @app.command()
 def metadata(
     manifest: Path = typer.Option(
-        Path("storage/metadata/manifest.json"), "--manifest", "-m", help="Manifest produced by `kiaf inventory`."
+        paths.MANIFEST, "--manifest", "-m", help="Manifest produced by `kiaf inventory`."
     ),
     log: Path = typer.Option(
-        Path("storage/metadata/conversion_log.json"), "--log", help="Conversion log produced by `kiaf convert`."
+        paths.CONVERSION_LOG, "--log", help="Conversion log produced by `kiaf convert`."
     ),
     output: Path = typer.Option(
-        Path("storage/metadata/documents.json"), "--output", "-o", help="Where to write the metadata index."
+        paths.DOCUMENTS, "--output", "-o", help="Where to write the metadata index."
     ),
 ) -> None:
     """Extract per-document metadata from converted Markdown (Phase 3)."""
@@ -88,16 +125,16 @@ def metadata(
 @app.command()
 def enrich(
     metadata_file: Path = typer.Option(
-        Path("storage/metadata/documents.json"), "--metadata", help="Metadata index produced by `kiaf metadata`."
+        paths.DOCUMENTS, "--metadata", help="Metadata index produced by `kiaf metadata`."
     ),
     output: Path = typer.Option(
-        Path("storage/metadata/entities.json"), "--output", "-o", help="Where to write the extracted entities."
+        paths.ENTITIES, "--output", "-o", help="Where to write the extracted entities."
     ),
     model: str = typer.Option("llama3.2", help="Ollama chat model for entity extraction."),  # keep in sync with rag.ollama_llm.DEFAULT_CHAT_MODEL
     max_chars: int = typer.Option(
         8000, help="How much of each document to send to the model."  # keep in sync with enrichment.extractor.DEFAULT_MAX_CHARS
     ),
-    host: str = typer.Option(None, help="Ollama host (defaults to OLLAMA_HOST or localhost)."),
+    host: str | None = typer.Option(None, help="Ollama host (defaults to OLLAMA_HOST or localhost)."),
 ) -> None:
     """Extract entities and topics from each document (Phase 4)."""
     from know_it_all_friend.enrichment.extractor import enrich_documents, write_entities
@@ -116,10 +153,10 @@ def enrich(
 @app.command()
 def chunk(
     metadata_file: Path = typer.Option(
-        Path("storage/metadata/documents.json"), "--metadata", help="Metadata index produced by `kiaf metadata`."
+        paths.DOCUMENTS, "--metadata", help="Metadata index produced by `kiaf metadata`."
     ),
     output: Path = typer.Option(
-        Path("storage/chunks/chunks.json"), "--output", "-o", help="Where to write the chunks."
+        paths.CHUNKS, "--output", "-o", help="Where to write the chunks."
     ),
     max_chars: int = typer.Option(1500, help="Maximum characters per chunk."),  # keep in sync with chunking.chunker.DEFAULT_MAX_CHARS
     overlap_chars: int = typer.Option(
@@ -139,13 +176,13 @@ def chunk(
 @app.command()
 def index(
     chunks_file: Path = typer.Option(
-        Path("storage/chunks/chunks.json"), "--chunks", help="Chunks produced by `kiaf chunk`."
+        paths.CHUNKS, "--chunks", help="Chunks produced by `kiaf chunk`."
     ),
     output: Path = typer.Option(
-        Path("storage/indexes/default"), "--output", "-o", help="Directory to write the vector index."
+        paths.INDEX_DIR, "--output", "-o", help="Directory to write the vector index."
     ),
     embed_model: str = typer.Option("nomic-embed-text", help="Ollama embedding model to use."),  # keep in sync with embeddings.ollama_embedder.DEFAULT_EMBED_MODEL
-    host: str = typer.Option(None, help="Ollama host (defaults to OLLAMA_HOST or localhost)."),
+    host: str | None = typer.Option(None, help="Ollama host (defaults to OLLAMA_HOST or localhost)."),
 ) -> None:
     """Embed chunks with a local Ollama model and build the vector index (Phases 6-7)."""
     from know_it_all_friend.chunking.chunker import load_chunks
@@ -163,7 +200,7 @@ def index(
 def search(
     query: str = typer.Argument(..., help="Natural-language search query."),
     index_dir: Path = typer.Option(
-        Path("storage/indexes/default"), "--index", help="Index directory produced by `kiaf index`."
+        paths.INDEX_DIR, "--index", help="Index directory produced by `kiaf index`."
     ),
     top_k: int = typer.Option(5, help="Number of results to return."),
     mode: str = typer.Option(
@@ -176,7 +213,7 @@ def search(
     diversify: bool = typer.Option(
         False, help="Re-select results with MMR so near-duplicate chunks don't crowd out distinct ones."
     ),
-    host: str = typer.Option(None, help="Ollama host (defaults to OLLAMA_HOST or localhost)."),
+    host: str | None = typer.Option(None, help="Ollama host (defaults to OLLAMA_HOST or localhost)."),
 ) -> None:
     """Semantic search over the indexed chunks (Phase 8)."""
     from know_it_all_friend.embeddings.ollama_embedder import OllamaEmbedder
@@ -211,12 +248,12 @@ def search(
 def ask(
     question: str = typer.Argument(..., help="Question to answer from the document collection."),
     index_dir: Path = typer.Option(
-        Path("storage/indexes/default"), "--index", help="Index directory produced by `kiaf index`."
+        paths.INDEX_DIR, "--index", help="Index directory produced by `kiaf index`."
     ),
     model: str = typer.Option("llama3.2", help="Ollama chat model to generate the answer."),  # keep in sync with rag.ollama_llm.DEFAULT_CHAT_MODEL
     top_k: int = typer.Option(5, help="Number of chunks to retrieve as context."),
     stream: bool = typer.Option(False, help="Print the answer incrementally as it's generated."),
-    host: str = typer.Option(None, help="Ollama host (defaults to OLLAMA_HOST or localhost)."),
+    host: str | None = typer.Option(None, help="Ollama host (defaults to OLLAMA_HOST or localhost)."),
 ) -> None:
     """Answer a question from retrieved context, with citations (Phase 9)."""
     from know_it_all_friend.embeddings.ollama_embedder import OllamaEmbedder
@@ -256,10 +293,10 @@ def eval_retrieval(
         ..., help='JSON file of eval cases: [{"query": "...", "expected_document_id": "document_001"}, ...]'
     ),
     index_dir: Path = typer.Option(
-        Path("storage/indexes/default"), "--index", help="Index directory produced by `kiaf index`."
+        paths.INDEX_DIR, "--index", help="Index directory produced by `kiaf index`."
     ),
     top_k: int = typer.Option(5, help="Number of results to check for a hit."),
-    host: str = typer.Option(None, help="Ollama host (defaults to OLLAMA_HOST or localhost)."),
+    host: str | None = typer.Option(None, help="Ollama host (defaults to OLLAMA_HOST or localhost)."),
 ) -> None:
     """Measure retrieval quality (hit-rate@k, MRR) against labeled queries."""
     from know_it_all_friend.embeddings.ollama_embedder import OllamaEmbedder
@@ -283,13 +320,13 @@ def eval_retrieval(
 @graph_app.command("build")
 def graph_build(
     metadata_file: Path = typer.Option(
-        Path("storage/metadata/documents.json"), "--metadata", help="Metadata index produced by `kiaf metadata`."
+        paths.DOCUMENTS, "--metadata", help="Metadata index produced by `kiaf metadata`."
     ),
     entities_file: Path = typer.Option(
-        Path("storage/metadata/entities.json"), "--entities", help="Entities produced by `kiaf enrich`."
+        paths.ENTITIES, "--entities", help="Entities produced by `kiaf enrich`."
     ),
     output: Path = typer.Option(
-        Path("storage/metadata/graph.json"), "--output", "-o", help="Where to write the graph."
+        paths.GRAPH, "--output", "-o", help="Where to write the graph."
     ),
 ) -> None:
     """Build the knowledge graph from extracted entities (Phase 12)."""
@@ -311,7 +348,7 @@ def graph_build(
 def graph_related(
     name: str = typer.Argument(..., help="Entity name to look up (case-insensitive)."),
     graph_file: Path = typer.Option(
-        Path("storage/metadata/graph.json"), "--graph", help="Graph produced by `kiaf graph build`."
+        paths.GRAPH, "--graph", help="Graph produced by `kiaf graph build`."
     ),
     top: int = typer.Option(10, help="How many related entities to show."),
 ) -> None:
@@ -336,7 +373,7 @@ def graph_related(
 def graph_doc(
     document_id: str = typer.Argument(..., help="Document ID to inspect, e.g. document_001."),
     graph_file: Path = typer.Option(
-        Path("storage/metadata/graph.json"), "--graph", help="Graph produced by `kiaf graph build`."
+        paths.GRAPH, "--graph", help="Graph produced by `kiaf graph build`."
     ),
 ) -> None:
     """Show the entities mentioned in a document."""
@@ -359,13 +396,13 @@ def serve(
     bind: str = typer.Option("127.0.0.1", help="Address to bind the API server to."),
     port: int = typer.Option(8000, help="Port to serve the API on."),
     metadata_file: Path = typer.Option(
-        Path("storage/metadata/documents.json"), "--metadata", help="Metadata index produced by `kiaf metadata`."
+        paths.DOCUMENTS, "--metadata", help="Metadata index produced by `kiaf metadata`."
     ),
     index_dir: Path = typer.Option(
-        Path("storage/indexes/default"), "--index", help="Index directory produced by `kiaf index`."
+        paths.INDEX_DIR, "--index", help="Index directory produced by `kiaf index`."
     ),
     model: str = typer.Option("llama3.2", help="Ollama chat model for /ask."),  # keep in sync with rag.ollama_llm.DEFAULT_CHAT_MODEL
-    host: str = typer.Option(None, help="Ollama host (defaults to OLLAMA_HOST or localhost)."),
+    host: str | None = typer.Option(None, help="Ollama host (defaults to OLLAMA_HOST or localhost)."),
 ) -> None:
     """Serve the knowledge base over a REST API (Phase 11)."""
     import uvicorn
@@ -386,13 +423,13 @@ def serve(
 def ui(
     port: int = typer.Option(8501, help="Port to serve the web UI on."),
     metadata_file: Path = typer.Option(
-        Path("storage/metadata/documents.json"), "--metadata", help="Metadata index."
+        paths.DOCUMENTS, "--metadata", help="Metadata index."
     ),
     entities_file: Path = typer.Option(
-        Path("storage/metadata/entities.json"), "--entities", help="Entities file."
+        paths.ENTITIES, "--entities", help="Entities file."
     ),
     index_dir: Path = typer.Option(
-        Path("storage/indexes/default"), "--index", help="Index directory."
+        paths.INDEX_DIR, "--index", help="Index directory."
     ),
 ) -> None:
     """Launch the Streamlit knowledge explorer (Phase 11)."""

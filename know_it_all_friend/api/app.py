@@ -14,6 +14,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
 
+from know_it_all_friend import paths
 from know_it_all_friend.embeddings.base import BaseEmbedder
 from know_it_all_friend.metadata.extractor import load_metadata
 from know_it_all_friend.rag.answer import answer_question
@@ -23,8 +24,8 @@ from know_it_all_friend.vectorstore.local_store import LocalVectorStore
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_METADATA_PATH = Path("storage/metadata/documents.json")
-DEFAULT_INDEX_DIR = Path("storage/indexes/default")
+DEFAULT_METADATA_PATH = paths.DOCUMENTS
+DEFAULT_INDEX_DIR = paths.INDEX_DIR
 
 
 class AskRequest(BaseModel):
@@ -34,7 +35,7 @@ class AskRequest(BaseModel):
     end_date: str | None = None
 
 
-DEFAULT_ENTITIES_PATH = Path("storage/metadata/entities.json")
+DEFAULT_ENTITIES_PATH = paths.ENTITIES
 
 def create_app(
     metadata_path: Path = DEFAULT_METADATA_PATH,

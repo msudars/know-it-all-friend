@@ -52,6 +52,7 @@ Rather than sending raw PDFs, presentations, spreadsheets, and office documents 
 
 Available today:
 
+- One-command pipeline (`kiaf ingest`) with location-independent storage (`KIAF_HOME`)
 - Recursive document discovery (with OS/sidecar junk-file exclusion)
 - Document conversion to Markdown
 - Metadata extraction
@@ -118,6 +119,17 @@ While Know-it-all Friend can be used by anyone, its local-first, privacy-focused
 ## Installation
 
 Know-it-all Friend uses [uv](https://docs.astral.sh/uv/) for environment and dependency management.
+
+### Option A: Install as a tool
+
+```bash
+uv tool install git+https://github.com/msudars/know-it-all-friend.git
+kiaf --help
+```
+
+This puts `kiaf` on your PATH so it works from any directory. Pipeline outputs are stored in `~/.kiaf` (override with the `KIAF_HOME` environment variable — see [Where data is stored](#where-data-is-stored)).
+
+### Option B: Clone for development
 
 ### 1. Clone the repository
 
@@ -192,7 +204,32 @@ know-it-all-friend/
 
 ---
 
-## Quick Start: MVP Workflow
+## Quick Start
+
+With [Ollama running and models pulled](#local-models-via-ollama), two commands build and query a knowledge base:
+
+```bash
+kiaf ingest ~/Documents/my-project
+kiaf ask "What information is available about Topic A?"
+```
+
+`kiaf ingest` runs the whole pipeline in one go (inventory → convert → metadata → chunk → index → enrich → graph build). Pass `--no-enrich` to skip the LLM entity-extraction and graph steps, which are the slowest part on large collections.
+
+### Where data is stored
+
+Every command resolves its storage root the same way:
+
+1. `KIAF_HOME` environment variable, if set
+2. `./storage`, if it already exists in the current directory (the original repo-clone layout)
+3. `~/.kiaf` otherwise
+
+So installed users get a per-user knowledge base that works from any directory, and existing repo clones keep working unchanged. Point `KIAF_HOME` at different directories to maintain separate knowledge bases.
+
+---
+
+## The Pipeline, Step by Step
+
+Every stage of `kiaf ingest` is also its own command, useful for debugging and inspecting intermediate outputs.
 
 ### Step 1: Add documents
 
@@ -473,6 +510,7 @@ What information is available about Technology A?
 
 **MVP complete.** The full pipeline works end-to-end, with tests:
 
+- `kiaf ingest` — the whole pipeline below in one command
 - `kiaf inventory` — document discovery and manifest
 - `kiaf convert` — MarkItDown-based conversion to Markdown
 - `kiaf metadata` — per-document metadata extraction

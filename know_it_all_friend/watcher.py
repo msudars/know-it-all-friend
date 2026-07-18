@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import subprocess
 import time
 from pathlib import Path
 
@@ -46,26 +45,14 @@ class PipelineTriggerHandler(FileSystemEventHandler):
 
     def _run_pipeline(self) -> None:
         logger.info("Changes stabilized. Starting automatic ingestion pipeline...")
-        commands = [
-            ["kiaf", "inventory", self.input_dir],
-            ["kiaf", "convert"],
-            ["kiaf", "metadata"],
-            ["kiaf", "chunk"],
-            ["kiaf", "index"],
-            ["kiaf", "enrich"],
-            ["kiaf", "graph", "build"],
-        ]
-        
-        for cmd in commands:
-            logger.info("Running `%s`...", " ".join(cmd))
-            try:
-                # We use uv run to ensure we run in the right environment
-                subprocess.run(["uv", "run"] + cmd, check=True)
-            except subprocess.CalledProcessError as exc:
-                logger.error("Pipeline failed at `%s` with exit code %d", " ".join(cmd), exc.returncode)
-                logger.error("Watching for new changes...")
-                return
-                
+        from know_it_all_friend.cli.main import run_ingest
+
+        try:
+            run_ingest(Path(self.input_dir))
+        except Exception:
+            logger.exception("Pipeline failed. Watching for new changes...")
+            return
+
         logger.info("✅ Pipeline completed successfully. Watching for new changes...")
 
 

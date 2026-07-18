@@ -14,6 +14,7 @@ from pathlib import Path
 
 import streamlit as st
 
+from know_it_all_friend import paths
 from know_it_all_friend.enrichment.extractor import load_entities
 from know_it_all_friend.metadata.extractor import load_metadata
 from know_it_all_friend.rag.answer import answer_from_results
@@ -21,9 +22,9 @@ from know_it_all_friend.rag.ollama_llm import DEFAULT_CHAT_MODEL, OllamaLLM
 from know_it_all_friend.retrieval.search import search_index
 from know_it_all_friend.vectorstore.local_store import LocalVectorStore
 
-METADATA_PATH = Path(os.environ.get("KIAF_METADATA_PATH", "storage/metadata/documents.json"))
-ENTITIES_PATH = Path(os.environ.get("KIAF_ENTITIES_PATH", "storage/metadata/entities.json"))
-INDEX_DIR = Path(os.environ.get("KIAF_INDEX_DIR", "storage/indexes/default"))
+METADATA_PATH = Path(os.environ.get("KIAF_METADATA_PATH", str(paths.DOCUMENTS)))
+ENTITIES_PATH = Path(os.environ.get("KIAF_ENTITIES_PATH", str(paths.ENTITIES)))
+INDEX_DIR = Path(os.environ.get("KIAF_INDEX_DIR", str(paths.INDEX_DIR)))
 
 st.set_page_config(page_title="Know-it-all Friend", page_icon="📚", layout="wide")
 

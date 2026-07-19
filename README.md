@@ -1,527 +1,129 @@
-# Know-it-all Friend
+# Know-it-all Friend 📚
 
-> Convert folders of documents into a structured, searchable knowledge base for search, discovery, and retrieval-augmented generation.
+> Turn a folder of documents into a private, searchable knowledge base — semantic search, cited answers, and a knowledge graph, running 100% on your machine.
 
-Know-it-all Friend is an open-source, domain-agnostic framework for consolidating information from documents such as reports, presentations, spreadsheets, publications, meeting notes, web exports, and text files.
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](pyproject.toml)
+[![Local-first](https://img.shields.io/badge/AI-local--first-orange.svg)](#local-models-via-ollama)
 
-The project helps users move from managing scattered files to managing reusable knowledge.
-
----
-
-## What This Project Does
-
-Know-it-all Friend takes a folder of documents and turns it into a knowledge base.
+Point it at your PDFs, Word docs, presentations, spreadsheets, and notes. It converts them to Markdown, chunks and embeds them with local models, and gives you search, question answering with citations, and an entity graph — without a single byte leaving your machine.
 
 ```text
-Documents
-    ↓
-Markdown
-    ↓
-Metadata
-    ↓
-Chunks
-    ↓
-Embeddings
-    ↓
-Vector Database
-    ↓
-Search / API / Chat
-```
-
-The first implementation uses Microsoft's `markitdown` package as the primary document-to-Markdown conversion backend.
-
-See [docs/architecture.md](docs/architecture.md) for how the pipeline stages, interfaces, and storage artifacts fit together.
-
----
-
-## Why Markdown?
-
-Markdown is used as the canonical intermediate format because it is:
-
-- Human-readable
-- Easy to version control
-- Easy to inspect and debug
-- Friendly to LLM and retrieval workflows
-- Suitable for chunking and metadata extraction
-
-Rather than sending raw PDFs, presentations, spreadsheets, and office documents directly into a RAG system, Know-it-all Friend first converts them into a cleaner Markdown representation.
-
----
-
-## Key Features
-
-Available today:
-
-- One-command pipeline (`kiaf ingest`) with location-independent storage (`KIAF_HOME`)
-- Recursive document discovery (with OS/sidecar junk-file exclusion)
-- Document conversion to Markdown
-- Metadata extraction
-- Markdown repository creation
-- LLM-based entity, topic, and true document date extraction
-- Heading-aware document chunking with word-boundary-safe overlap between consecutive chunks
-- Embedding generation (local, via Ollama)
-- On-disk vector index
-- Semantic search, with optional BM25 hybrid keyword search, MMR result diversification, score thresholds, document-ID filtering, and date-range filtering
-- Retrieval-augmented question answering with source citations, out-of-range citation detection, and streaming answers
-- Document deduplication and intelligent versioning (archiving older versions)
-- Retrieval quality evaluation harness (hit-rate@k, MRR) against labeled queries
-- Content-hash based document staleness detection
-- Knowledge graph over documents and entities
-- REST API
-- Web knowledge explorer (search, ask with evidence, document browser)
-
-Planned:
-
-- Server-backed vector stores (e.g. Qdrant)
-- Relationship-aware retrieval
-
----
-
-## Domain-Agnostic by Design
-
-Know-it-all Friend is not designed for one specific field or organization.
-
-It can be used for:
-
-- Research documentation
-- Technical documentation
-- Internal knowledge repositories
-- Policy and compliance documents
-- Educational materials
-- Meeting notes
-- Project archives
-- Digital libraries
-- Personal knowledge management
-
-Examples in this repository should use neutral placeholders such as:
-
-- Project Alpha
-- Topic A
-- Technology A
-- Dataset X
-- Document A
-
-Avoid adding proprietary, organization-specific, or domain-specific terminology to public examples.
-
----
-
-## Target Niches & Vision
-
-While Know-it-all Friend can be used by anyone, its local-first, privacy-focused architecture makes it especially powerful as a **Secure, Air-Gapped Knowledge Engine** for privacy-constrained professionals:
-
-- **Legal & Compliance:** Query case files, NDAs, and contracts without uploading sensitive client data to public cloud AI.
-- **Investigative Journalism:** Connect dots across gigabytes of leaked documents securely.
-- **Corporate R&D / Hardware Engineering:** Cross-reference decades of internal R&D PDFs to prevent repeating failed experiments.
-- **Offline / Remote Workers:** Instant access to troubleshooting manuals in zero-internet environments.
-
----
-
-## Installation
-
-Know-it-all Friend uses [uv](https://docs.astral.sh/uv/) for environment and dependency management.
-
-### Option A: Install as a tool
-
-```bash
-uv tool install git+https://github.com/msudars/know-it-all-friend.git
-kiaf --help
-```
-
-This puts `kiaf` on your PATH so it works from any directory. Pipeline outputs are stored in `~/.kiaf` (override with the `KIAF_HOME` environment variable — see [Where data is stored](#where-data-is-stored)).
-
-### Option B: Clone for development
-
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/msudars/know-it-all-friend.git
-cd know-it-all-friend
-```
-
-### 2. Install uv (if you don't already have it)
-
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
-
-### 3. Create the environment and install dependencies
-
-```bash
-uv sync
-```
-
-This creates a project-local `.venv/` and installs the package plus its dependencies — including MarkItDown's `pdf`, `docx`, `pptx`, and `xlsx` extras — at the exact versions pinned in `uv.lock`, so every clone of this repo resolves to the same environment.
-
-### 4. Run the CLI
-
-```bash
-uv run kiaf --help
-```
-
-`uv run` executes commands inside the project's `.venv` without needing to activate it manually. If you prefer an activated shell:
-
-```bash
-source .venv/bin/activate
-kiaf --help
-```
-
----
-
-## Repository Structure
-
-```text
-know-it-all-friend/
-├── docs/                     # architecture and design notes
-├── tests/
-├── storage/                  # pipeline outputs (gitignored, regenerable)
-│   ├── markdown/             # converted documents
-│   ├── chunks/               # chunked retrieval units
-│   ├── metadata/             # manifest, conversion log, metadata, entities, graph
-│   └── indexes/              # vector indexes
-│
-├── know_it_all_friend/
-│   ├── ingestion/            # Phase 1  — discovery + manifest
-│   ├── conversion/           # Phase 2  — MarkItDown → Markdown
-│   ├── metadata/             # Phase 3  — per-document metadata
-│   ├── enrichment/           # Phase 4  — LLM entity/topic extraction
-│   ├── chunking/             # Phase 5  — heading-aware chunking
-│   ├── embeddings/           # Phase 6  — BaseEmbedder + Ollama backend
-│   ├── vectorstore/          # Phase 7  — local on-disk vector index
-│   ├── retrieval/            # Phase 8  — semantic search
-│   ├── rag/                  # Phase 9  — cited answers, BaseLLM + Ollama backend
-│   ├── graph/                # Phase 12 — knowledge graph
-│   ├── api/                  # Phase 11 — FastAPI REST layer
-│   ├── ui/                   # Phase 11 — Streamlit knowledge explorer
-│   └── cli/                  # the `kiaf` command
-│
-├── pyproject.toml
-├── uv.lock
-├── README.md
-├── claude.md
-├── LICENSE
-└── .gitignore
+Documents → Markdown → Chunks → Embeddings → Vector index → Search · Ask · Graph · API · UI
 ```
 
 ---
 
 ## Quick Start
 
-With [Ollama running and models pulled](#local-models-via-ollama), two commands build and query a knowledge base:
+**1. Install `kiaf`** (needs [uv](https://docs.astral.sh/uv/)):
+
+```bash
+uv tool install git+https://github.com/msudars/know-it-all-friend.git
+```
+
+**2. Install [Ollama](https://ollama.com) and pull the two local models:**
+
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+ollama pull nomic-embed-text   # embeddings (~270 MB)
+ollama pull llama3.2           # answers & entity extraction (~2 GB)
+```
+
+**3. Build a knowledge base and ask it something:**
 
 ```bash
 kiaf ingest ~/Documents/my-project
 kiaf ask "What information is available about Topic A?"
 ```
 
-`kiaf ingest` runs the whole pipeline in one go (inventory → convert → metadata → chunk → index → enrich → graph build). Pass `--no-enrich` to skip the LLM entity-extraction and graph steps, which are the slowest part on large collections.
+`kiaf ingest` runs the whole pipeline in one go. Pass `--no-enrich` to skip LLM entity extraction and graph building — the slowest steps on large collections.
 
-### Where data is stored
+---
+
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| `kiaf ingest <dir>` | Build or refresh the knowledge base from a folder, end to end |
+| `kiaf search "..."` | Semantic search with sources (`--mode hybrid` fuses in BM25 keyword search, `--diversify` applies MMR) |
+| `kiaf ask "..."` | Answer a question from your documents, with numbered citations (`--stream` for live output) |
+| `kiaf graph related "Topic A"` | Show documents and co-occurring entities for an entity |
+| `kiaf graph doc document_001` | Show the entities mentioned in a document |
+| `kiaf watch <dir>` | Watch a folder and re-ingest automatically on changes |
+| `kiaf ui` | Launch the Streamlit knowledge explorer (search, ask with evidence, document browser) |
+| `kiaf serve` | Serve a REST API (FastAPI, interactive docs at `/docs`) |
+| `kiaf eval-retrieval <cases.json>` | Measure retrieval quality (hit-rate@k, MRR) against labeled queries |
+
+Every pipeline stage is also its own command — `inventory`, `convert`, `metadata`, `chunk`, `index`, `enrich`, `graph build` — useful for debugging and inspecting intermediate outputs. Run `kiaf --help` or `kiaf <command> --help` for all options.
+
+---
+
+## Where Data Is Stored
 
 Every command resolves its storage root the same way:
 
 1. `KIAF_HOME` environment variable, if set
-2. `./storage`, if it already exists in the current directory (the original repo-clone layout)
+2. `./storage`, if it already exists in the current directory
 3. `~/.kiaf` otherwise
 
-So installed users get a per-user knowledge base that works from any directory, and existing repo clones keep working unchanged. Point `KIAF_HOME` at different directories to maintain separate knowledge bases.
+Point `KIAF_HOME` at different directories to keep separate knowledge bases. All outputs are plain, inspectable files: converted Markdown, JSON metadata and chunks, and a NumPy vector index.
 
 ---
 
-## The Pipeline, Step by Step
+## Features
 
-Every stage of `kiaf ingest` is also its own command, useful for debugging and inspecting intermediate outputs.
+- **One-command ingestion** — discovery, conversion, chunking, embedding, and graph building via `kiaf ingest`, or continuously via `kiaf watch`
+- **Broad format support** — PDF, Word, PowerPoint, Excel, Markdown, text, and more via [MarkItDown](https://github.com/microsoft/markitdown)
+- **Answers you can check** — every answer cites numbered sources that resolve back to a file, with out-of-range citation detection
+- **Serious retrieval** — hybrid BM25 + vector search, MMR diversification, score thresholds, date and document filters, plus an evaluation harness
+- **Knowledge graph** — typed entities (people, organizations, projects, technologies, …) and true document dates extracted per document, linked by co-occurrence
+- **Deduplication & versioning** — exact-duplicate detection and filename-based version pruning keep stale copies out of the index
+- **Inspectable by design** — Markdown as the canonical intermediate format; every stage writes plain files you can read, diff, and version
+- **Pluggable** — conversion, embeddings, and LLM backends sit behind small interfaces (`BaseConverter`, `BaseEmbedder`, `BaseLLM`)
 
-### Step 1: Add documents
+---
 
-Place files into an input directory:
+## Who It's For
 
-```text
-input/
-├── report.docx
-├── presentation.pptx
-├── publication.pdf
-├── table.xlsx
-└── notes.md
-```
+The local-first architecture makes it a fit wherever documents can't go to cloud AI:
 
-### Step 2: Create a document inventory
-
-Available now:
-
-```bash
-uv run kiaf inventory input/ --output storage/metadata/manifest.json
-```
-
-Output (`storage/metadata/manifest.json`):
-
-```json
-[
-  {
-    "id": "document_001",
-    "filename": "report.docx",
-    "extension": "docx",
-    "path": "input/report.docx",
-    "size_bytes": 123456
-  }
-]
-```
-
-Files are discovered recursively by default (pass `--no-recursive` to scan only the top level) and IDs are assigned in sorted path order, so the manifest is reproducible across runs on the same input set. Hidden dotfiles, OS bookkeeping files (`.DS_Store`, `Thumbs.db`), and NTFS sidecar streams (`report.pdf:Zone.Identifier`) are skipped; pass `--include-system-files` to inventory them anyway.
-
-### Step 3: Convert documents to Markdown
-
-Available now:
-
-```bash
-uv run kiaf convert --manifest storage/metadata/manifest.json --output storage/markdown/
-```
-
-Output:
-
-```text
-storage/markdown/
-├── document_001.md
-├── document_002.md
-├── document_003.md
-└── document_004.md
-```
-
-Markdown files are named by document ID rather than original filename, since two source files can share a name across different input subfolders — the ID is the stable join key back to the manifest. A per-file status log is written to `storage/metadata/conversion_log.json`; a failure on one document (unsupported format, corrupt file) is recorded there and does not stop the rest of the batch from converting.
-
-### Step 4: Extract metadata
-
-Available now:
-
-```bash
-uv run kiaf metadata
-```
-
-Joins the manifest with the conversion log and the converted Markdown to produce `storage/metadata/documents.json`:
-
-```json
-{
-  "document_id": "document_001",
-  "title": "Example Report",
-  "source_file": "input/report.docx",
-  "markdown_file": "storage/markdown/document_001.md",
-  "extension": "docx",
-  "size_bytes": 123456,
-  "word_count": 842
-}
-```
-
-The title comes from the first Markdown heading, falling back to the filename. Documents whose conversion failed are skipped. This step also performs exact content deduplication and filename-based version pruning, keeping only the newest version active and flagging the rest as archived so they don't bloat the vector index.
-
-### Step 5: Chunk documents
-
-Available now:
-
-```bash
-uv run kiaf chunk
-```
-
-Splits each Markdown document at its headings, then packs long sections paragraph-by-paragraph so no chunk exceeds `--max-chars` (default 1500). Chunks carry their document ID, title, source path, and nearest heading, and are written to `storage/chunks/chunks.json`.
-
-### Step 6: Build embeddings and vector index
-
-Available now (requires a running [Ollama](https://ollama.com) server, see below):
-
-```bash
-uv run kiaf index
-```
-
-Embeds every chunk with a local Ollama embedding model (default `nomic-embed-text`) and writes a local vector index to `storage/indexes/default/` — three plain, inspectable files: `embeddings.npy`, `chunks.json`, and `config.json`. The config records which embedding model built the index so queries always use the same one.
-
-### Step 7: Search
-
-Available now:
-
-```bash
-uv run kiaf search "Topic A"
-```
-
-Embeds the query, ranks chunks by cosine similarity, and prints the top matches with document titles, source paths, and snippets.
-
-### Step 8: Ask questions with retrieved context
-
-Available now:
-
-```bash
-uv run kiaf ask "What information is available about Topic A?"
-```
-
-Retrieves the most relevant chunks, sends them as numbered sources to a local Ollama chat model (default `llama3.2`, override with `--model`), and prints the answer followed by the numbered source list so every citation resolves back to a file.
-
-### Step 9: Extract entities and build the knowledge graph
-
-Available now:
-
-```bash
-uv run kiaf enrich
-uv run kiaf graph build
-uv run kiaf graph related "Topic A"
-uv run kiaf graph doc document_001
-```
-
-`kiaf enrich` extracts typed entities (people, organizations, projects, products, datasets, technologies, publications, locations, topics) and the true document creation/publication date from each document with the local chat model, writing `storage/metadata/entities.json`. `kiaf graph build` turns those into `storage/metadata/graph.json` — a time-aware mapping of document→entity mentions plus entity↔entity co-occurrence edges weighted by shared documents — which `kiaf graph related` and `kiaf graph doc` explore from the command line.
-
-### Step 10: Serve the REST API
-
-Available now:
-
-```bash
-uv run kiaf serve
-```
-
-Exposes the knowledge base as JSON on `http://127.0.0.1:8000` (interactive docs at `/docs`): `GET /documents`, `GET /search?q=...&start_date=...`, `POST /ask`, `GET /health`. Accessing the root (`/`) automatically redirects to `/docs`. Backends are pluggable, so other frontends can build on this without touching the pipeline.
-
-### Step 11: Explore in the web UI
-
-Available now:
-
-```bash
-uv run kiaf ui
-```
-
-Launches a local Streamlit knowledge explorer on `http://localhost:8501` with three views: semantic **Search**, **Ask** (the generated answer side-by-side with the retrieved evidence it came from), and a **Documents** table with extracted entities and converted-Markdown previews. The UI is search-first by design — chat is one panel, not the front door.
+- **Legal & compliance** — query case files, NDAs, and contracts without uploading client data
+- **Investigative journalism** — connect dots across large document troves, securely
+- **R&D archives** — cross-reference years of internal reports and lab notes
+- **Offline & remote work** — instant answers from manuals in zero-internet environments
+- **Personal knowledge management** — notes, papers, and project archives, searchable at last
 
 ---
 
 ## Local Models via Ollama
 
-The MVP is local-first: embeddings and answer generation both run through [Ollama](https://ollama.com) on your own machine, so document content never leaves it. One-time setup:
+Embeddings and answer generation both run through [Ollama](https://ollama.com) on your own machine — document content never leaves it.
+
+- Defaults: `nomic-embed-text` for embeddings, `llama3.2` for chat
+- Override with `kiaf ingest --embed-model ... --model ...` (and `kiaf ask --model ...`)
+- Ollama running elsewhere? Every model-backed command accepts `--host`
+
+The index records which embedding model built it, so queries always use the matching model.
+
+---
+
+## Development
 
 ```bash
-curl -fsSL https://ollama.com/install.sh | sh   # or your platform's installer
-ollama pull nomic-embed-text                    # embedding model (~270 MB)
-ollama pull llama3.2                            # chat model (~2 GB)
+git clone https://github.com/msudars/know-it-all-friend.git
+cd know-it-all-friend
+uv sync              # create .venv and install pinned dependencies
+uv run pytest        # run the test suite
+uv run kiaf --help
 ```
 
-All model-backed commands accept `--host` if Ollama runs somewhere other than `localhost:11434`, and `kiaf index --embed-model` / `kiaf ask --model` to use different models.
+See [docs/architecture.md](docs/architecture.md) for how the pipeline stages, interfaces, and storage artifacts fit together. Planned next: server-backed vector stores (e.g. Qdrant) and relationship-aware retrieval.
 
-Like conversion, the model backends sit behind interfaces (`BaseEmbedder`, `BaseLLM`) so hosted APIs or other local runtimes can be added later without touching the pipeline.
-
----
-
-## MarkItDown Conversion Backend
-
-The MVP uses MarkItDown for converting files to Markdown, wrapped behind an internal interface so the rest of the pipeline never depends on MarkItDown directly:
-
-- [`know_it_all_friend/conversion/base.py`](know_it_all_friend/conversion/base.py) — the `BaseConverter` interface
-- [`know_it_all_friend/conversion/markitdown_converter.py`](know_it_all_friend/conversion/markitdown_converter.py) — `MarkItDownConverter`, the first backend
-- [`know_it_all_friend/conversion/pipeline.py`](know_it_all_friend/conversion/pipeline.py) — runs a converter over a manifest, writing Markdown files and a per-file status log
-
-This keeps the architecture flexible so future conversion backends can be added without rewriting the whole pipeline.
-
-Potential future backends:
-
-- Docling
-- Marker
-- Pandoc
-- Custom parsers
-
----
-
-## MVP Scope
-
-The first usable version should include:
-
-- File discovery
-- Manifest creation
-- MarkItDown-based conversion
-- Markdown storage
-- Metadata extraction
-- Chunking
-- Embedding generation
-- Vector database integration
-- Semantic search
-- Basic RAG question answering with citations
-
-Do not start with a complex chatbot interface. Build the knowledge layer first.
-
----
-
-## Development Roadmap
-
-All roadmap phases have shipped; remaining work is post-roadmap (see Project Status).
-
-| Phase | Scope | Status |
-| --- | --- | --- |
-| 1 | Document inventory (`kiaf inventory`) | ✅ |
-| 2 | Conversion to Markdown via MarkItDown (`kiaf convert`) | ✅ |
-| 3 | Metadata extraction (`kiaf metadata`) | ✅ |
-| 4 | Knowledge enrichment — entities and topics (`kiaf enrich`) | ✅ |
-| 5 | Heading-aware chunking (`kiaf chunk`) | ✅ |
-| 6 | Embeddings via local Ollama models (`kiaf index`) | ✅ |
-| 7 | Vector storage — local on-disk index (`kiaf index`) | ✅ (server-backed stores planned, see #5) |
-| 8 | Retrieval — semantic search, hybrid BM25 + MMR + filters (`kiaf search`) | ✅ |
-| 9 | RAG with citations (`kiaf ask`) | ✅ |
-| 10 | UI and knowledge graph (`kiaf ui`, `kiaf serve`, `kiaf graph`) | ✅ |
-
----
-
-## Development Principles
-
-- Keep the system modular.
-- Keep the public examples domain-neutral.
-- Prefer inspectable intermediate outputs.
-- Save Markdown, metadata, and logs.
-- Preserve traceability from answer to source document.
-- Prioritize robustness over flashy demos.
-- Support local-first workflows where possible.
-
----
-
-## Example Use Cases
-
-### Search across project archives
-
-```text
-Find documents related to Topic A.
-```
-
-### Summarize a collection
-
-```text
-Summarize all documents associated with Project Alpha.
-```
-
-### Retrieve supporting evidence
-
-```text
-Which documents mention Dataset X?
-```
-
-### Ask questions with citations
-
-```text
-What information is available about Technology A?
-```
+Contributions welcome — keep examples domain-neutral (Project Alpha, Topic A, Dataset X), prefer inspectable intermediate outputs, and preserve traceability from answer to source document.
 
 ---
 
 ## License
 
 [MIT](LICENSE) © 2025 Meghana Sudarshan
-
----
-
-## Project Status
-
-**MVP complete.** The full pipeline works end-to-end, with tests:
-
-- `kiaf ingest` — the whole pipeline below in one command
-- `kiaf inventory` — document discovery and manifest
-- `kiaf convert` — MarkItDown-based conversion to Markdown
-- `kiaf metadata` — per-document metadata extraction
-- `kiaf chunk` — heading-aware Markdown chunking with word-boundary-safe overlap
-- `kiaf index` — local embeddings (Ollama) + on-disk vector index
-- `kiaf search` — semantic search with sources; optional hybrid BM25, MMR diversification, score threshold, document filtering
-- `kiaf ask` — RAG question answering with citations, streaming, and out-of-range citation warnings, via a local Ollama chat model
-- `kiaf eval-retrieval` — retrieval quality evaluation (hit-rate@k, MRR) against labeled queries
-- `kiaf enrich` — LLM-based entity and topic extraction
-- `kiaf graph` — knowledge graph over documents and entities (`build` / `related` / `doc`)
-- `kiaf serve` — REST API (FastAPI) over the knowledge base
-- `kiaf ui` — Streamlit knowledge explorer (search, ask with evidence, document browser)
-
-Not yet built (post-MVP roadmap): server-backed vector stores (e.g. Qdrant), relationship-aware retrieval, and multi-user deployments.

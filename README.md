@@ -53,9 +53,12 @@ kiaf ask "What information is available about Topic A?"
 | `kiaf watch <dir>` | Watch a folder and re-ingest automatically on changes |
 | `kiaf ui` | Launch the Streamlit knowledge explorer (search, ask with evidence, document browser) |
 | `kiaf serve` | Serve a REST API (FastAPI, interactive docs at `/docs`) |
+| `kiaf desktop` | Open the knowledge explorer in a native desktop window |
 | `kiaf eval-retrieval <cases.json>` | Measure retrieval quality (hit-rate@k, MRR) against labeled queries |
 
 Every pipeline stage is also its own command — `inventory`, `convert`, `metadata`, `chunk`, `index`, `enrich`, `graph build` — useful for debugging and inspecting intermediate outputs. Run `kiaf --help` or `kiaf <command> --help` for all options.
+
+> `kiaf desktop` on Linux needs QtWebEngine's system libraries (Debian/Ubuntu): `sudo apt-get install libnss3 libasound2t64 libxcb-cursor0 libxcb-icccm4 libxcb-util1 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-xkb1 libxkbcommon-x11-0`. Without a working GUI backend it falls back to opening your browser.
 
 ---
 

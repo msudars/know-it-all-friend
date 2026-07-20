@@ -463,5 +463,13 @@ def watch(
     start_watcher(str(input_dir))
 
 
+@app.command()
+def desktop() -> None:
+    """Launch the zero-setup native desktop app (Phase 14)."""
+    from know_it_all_friend.desktop import start_desktop
+
+    start_desktop()
+
+
 if __name__ == "__main__":
     app()

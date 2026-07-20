@@ -16,6 +16,10 @@ dependencies = [
     "rank-bm25>=0.2.2",
     "httpx>=0.28.1",
     "watchdog>=6.0.0",
+    "pywebview>=6.2.1",
+    "pyqt6>=6.11.0",
+    "pyqt6-webengine>=6.11.0",
+    "qtpy>=2.4.3",
 ]
 
 [project.scripts]

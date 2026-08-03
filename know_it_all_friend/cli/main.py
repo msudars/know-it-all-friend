@@ -95,8 +95,15 @@ def convert(
     write_conversion_log(results, log)
 
     succeeded = sum(1 for r in results if r.status == "success")
-    failed = len(results) - succeeded
-    typer.echo(f"Converted {succeeded} document(s), {failed} failed. Log written to {log}")
+    failures = [r for r in results if r.status != "success"]
+    typer.echo(f"Converted {succeeded} document(s), {len(failures)} failed. Log written to {log}")
+
+    # A failed document is absent from every later stage, so questions about it
+    # get confidently answered from other documents instead. The log records
+    # this, but nobody reads 600 lines of log -- name the casualties here.
+    for result in failures:
+        reason = " ".join((result.error or "unknown error").split())[:160]
+        typer.echo(f"  ! not in the knowledge base: {result.source_path} ({reason})", err=True)
 
 
 @app.command()

@@ -112,7 +112,12 @@ def build_document_metadata(
         logger.info("Extracted metadata for %s: %r (%d words)", record.id, doc.title, doc.word_count)
 
     def normalize_name(name: str) -> str:
-        return re.sub(r'(_v\d+|-v\d+|_final|-final|\(\d+\)|\s*\d+)$', '', name, flags=re.IGNORECASE).strip()
+        # Only suffixes that actually mark a revision are stripped. A bare
+        # trailing number is part of the name far more often than it is a
+        # version: `diagram1`/`diagram2` and `predictions_r0`/`predictions_r4`
+        # are distinct documents, and collapsing them archives real content.
+        # " 2" (copy-paste convention) and "(2)" still count as versions.
+        return re.sub(r'(_v\d+|-v\d+|_final|-final|\s*\(\d+\)|\s+\d+)$', '', name, flags=re.IGNORECASE).strip()
 
     seen_hashes: set[str] = set()
     groups: dict[str, list[tuple[int, DocumentMetadata]]] = {}

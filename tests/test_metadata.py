@@ -157,3 +157,28 @@ def test_find_changed_documents_flags_new_and_modified_only() -> None:
     ]
 
     assert find_changed_documents(previous, current) == ["document_002", "document_003"]
+
+
+def test_build_document_metadata_keeps_numbered_siblings(tmp_path: Path) -> None:
+    """`diagram1`/`diagram2` are distinct documents, not two versions of one."""
+    records = [_record(tmp_path, "diagram1.md", "diagram1"), _record(tmp_path, "diagram2.md", "diagram2")]
+    entries = [
+        _success_entry(tmp_path, "diagram1", "# One\n\nalpha\n"),
+        _success_entry(tmp_path, "diagram2", "# Two\n\nbeta\n"),
+    ]
+
+    docs = build_document_metadata(records, entries)
+
+    assert [d.archived for d in docs] == [False, False]
+
+
+def test_build_document_metadata_still_archives_copy_suffixes(tmp_path: Path) -> None:
+    records = [_record(tmp_path, "report.md", "report"), _record(tmp_path, "report (2).md", "report_2")]
+    entries = [
+        _success_entry(tmp_path, "report", "# Report\n\nalpha\n"),
+        _success_entry(tmp_path, "report_2", "# Report\n\nbeta\n"),
+    ]
+
+    docs = build_document_metadata(records, entries)
+
+    assert sum(d.archived for d in docs) == 1

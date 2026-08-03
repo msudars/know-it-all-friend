@@ -69,3 +69,13 @@ def test_write_conversion_log(tmp_path: Path) -> None:
     data = json.loads(log_path.read_text(encoding="utf-8"))
     assert data[0]["status"] == "success"
     assert data[0]["document_id"] == "document_001"
+
+
+def test_markitdown_converter_reads_text_formats_directly(tmp_path: Path) -> None:
+    """UTF-8 Markdown must survive conversion; markitdown sniffs it as cp1252 and fails."""
+    from know_it_all_friend.conversion.markitdown_converter import MarkItDownConverter
+
+    source = tmp_path / "plan.md"
+    source.write_text("# Plan\n\nBudget — €30k, ±0.5 °C.\n", encoding="utf-8")
+
+    assert "€30k" in MarkItDownConverter().convert(source)

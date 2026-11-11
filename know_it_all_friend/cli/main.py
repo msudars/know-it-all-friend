@@ -144,13 +144,14 @@ def enrich(
     host: str | None = typer.Option(None, help="Ollama host (defaults to OLLAMA_HOST or localhost)."),
 ) -> None:
     """Extract entities and topics from each document (Phase 4)."""
-    from know_it_all_friend.enrichment.extractor import enrich_documents, write_entities
+    from know_it_all_friend.enrichment.extractor import enrich_documents, load_entities, write_entities
     from know_it_all_friend.metadata.extractor import load_metadata
     from know_it_all_friend.rag.ollama_llm import OllamaLLM
 
     docs = load_metadata(metadata_file)
     llm = OllamaLLM(model=model, host=host)
-    enriched = enrich_documents(docs, llm, max_chars=max_chars)
+    previous = load_entities(output) if output.exists() else None
+    enriched = enrich_documents(docs, llm, max_chars=max_chars, previous=previous)
     write_entities(enriched, output)
     typer.echo(
         f"Enriched {len(enriched)}/{len(docs)} document(s) with {model}. Written to {output}"
@@ -194,11 +195,12 @@ def index(
     """Embed chunks with a local Ollama model and build the vector index (Phases 6-7)."""
     from know_it_all_friend.chunking.chunker import load_chunks
     from know_it_all_friend.embeddings.ollama_embedder import OllamaEmbedder
-    from know_it_all_friend.vectorstore.local_store import build_index
+    from know_it_all_friend.vectorstore.local_store import LocalVectorStore, build_index
 
     chunks = load_chunks(chunks_file)
     embedder = OllamaEmbedder(model=embed_model, host=host)
-    store = build_index(chunks, embedder)
+    previous = LocalVectorStore.load(output) if (output / "config.json").exists() else None
+    store = build_index(chunks, embedder, previous=previous)
     store.save(output)
     typer.echo(f"Indexed {len(store)} chunk(s) with {embed_model}. Index written to {output}")
 

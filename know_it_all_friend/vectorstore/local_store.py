@@ -136,13 +136,31 @@ class LocalVectorStore:
         )
 
 
-def build_index(chunks: list[Chunk], embedder: BaseEmbedder) -> LocalVectorStore:
-    """Embed every chunk and return an in-memory index ready to save."""
-    vectors = embedder.embed_texts([chunk.text for chunk in chunks])
+def build_index(
+    chunks: list[Chunk], embedder: BaseEmbedder, previous: LocalVectorStore | None = None
+) -> LocalVectorStore:
+    """Embed every chunk and return an in-memory index ready to save.
+
+    Chunks whose exact text is already in ``previous`` (built with the same
+    embedding model) reuse that vector, so re-ingesting a mostly unchanged
+    collection only embeds what changed.
+    """
+    cached: dict[str, np.ndarray] = {}
+    if previous is not None and previous.embedding_model == embedder.model:
+        cached = {chunk.text: previous._embeddings[i] for i, chunk in enumerate(previous._chunks)}
+    missing = list(dict.fromkeys(chunk.text for chunk in chunks if chunk.text not in cached))
+    if missing:
+        cached.update(zip(missing, np.asarray(embedder.embed_texts(missing), dtype=np.float32)))
+    vectors = [cached[chunk.text] for chunk in chunks]
     embeddings = (
         np.asarray(vectors, dtype=np.float32) if vectors else np.empty((0, 0), dtype=np.float32)
     )
-    logger.info("Built index over %d chunk(s) with %s", len(chunks), embedder.model)
+    logger.info(
+        "Built index over %d chunk(s) with %s (%d newly embedded)",
+        len(chunks),
+        embedder.model,
+        len(missing),
+    )
     return LocalVectorStore(embeddings=embeddings, chunks=chunks, embedding_model=embedder.model)
 
 

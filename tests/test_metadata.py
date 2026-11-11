@@ -182,3 +182,18 @@ def test_build_document_metadata_still_archives_copy_suffixes(tmp_path: Path) ->
     docs = build_document_metadata(records, entries)
 
     assert sum(d.archived for d in docs) == 1
+
+
+def test_build_document_metadata_keeps_same_name_in_different_folders_and_numbered_titles(
+    tmp_path: Path,
+) -> None:
+    """Same filename in two folders, or `Lecture 1`/`Lecture 2`, are distinct documents."""
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    names = ["a/README.md", "b/README.md", "Lecture 1.md", "Lecture 2.md"]
+    records = [_record(tmp_path, name, f"doc{i}") for i, name in enumerate(names)]
+    entries = [_success_entry(tmp_path, f"doc{i}", f"# Doc {i}\n\nbody {i}\n") for i in range(4)]
+
+    docs = build_document_metadata(records, entries)
+
+    assert [d.archived for d in docs] == [False] * 4

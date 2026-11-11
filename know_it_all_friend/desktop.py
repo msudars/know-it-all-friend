@@ -6,10 +6,8 @@ import logging
 import os
 import socket
 import subprocess
-import sys
 import time
 from contextlib import closing
-from pathlib import Path
 
 # qtpy prefers PyQt5 when both bindings are installed, but our webengine dep is
 # PyQt6 — pin the API before pywebview imports qtpy.
@@ -40,20 +38,15 @@ def _wait_for_server(port: int, timeout: float = 30.0) -> bool:
 
 def start_desktop() -> None:
     """Launch the Streamlit app in a native desktop window using pywebview."""
-    import know_it_all_friend.ui as ui_package
+    from know_it_all_friend.ui import streamlit_command
 
     port = _find_free_port()
-    ui_script = Path(ui_package.__file__).parent / "app.py"
 
     logger.info("Starting background Streamlit server on port %d...", port)
 
     # Launch Streamlit as a headless background process
     process = subprocess.Popen(
-        [
-            sys.executable, "-m", "streamlit", "run", str(ui_script),
-            "--server.port", str(port),
-            "--server.headless", "true"
-        ],
+        streamlit_command(port) + ["--server.headless", "true"],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL
     )
@@ -64,7 +57,7 @@ def start_desktop() -> None:
         logger.error("Streamlit server did not start on port %d.", port)
         raise SystemExit(1)
 
-    url = f"http://localhost:{port}"
+    url = f"http://127.0.0.1:{port}"
     logger.info("Opening interface at %s", url)
 
     if _WEBVIEW_AVAILABLE:

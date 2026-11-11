@@ -29,16 +29,21 @@ INDEX_DIR = Path(os.environ.get("KIAF_INDEX_DIR", str(paths.INDEX_DIR)))
 st.set_page_config(page_title="Know-it-all Friend", page_icon="📚", layout="wide")
 
 
-@st.cache_resource
-def _store() -> LocalVectorStore:
+@st.cache_resource(max_entries=1)
+def _load_store(mtime: float) -> LocalVectorStore:
     return LocalVectorStore.load(INDEX_DIR)
 
 
+def _store() -> LocalVectorStore:
+    # Keyed on the index's mtime so a re-ingest (e.g. `kiaf watch`) shows up without a restart.
+    return _load_store((INDEX_DIR / "config.json").stat().st_mtime)
+
+
 @st.cache_resource
-def _embedder(host: str):
+def _embedder(model: str, host: str):
     from know_it_all_friend.embeddings.ollama_embedder import OllamaEmbedder
 
-    return OllamaEmbedder(model=_store().embedding_model, host=host or None)
+    return OllamaEmbedder(model=model, host=host or None)
 
 
 @st.cache_resource
@@ -75,7 +80,7 @@ with search_tab:
             st.error("No index found — build the pipeline outputs first.")
         else:
             with st.spinner("Searching…"):
-                results = search_index(query, _store(), _embedder(ollama_host), top_k=top_k)
+                results = search_index(query, _store(), _embedder(_store().embedding_model, ollama_host), top_k=top_k)
             if not results:
                 st.info("No results.")
             for number, result in enumerate(results, start=1):
@@ -88,7 +93,7 @@ with ask_tab:
             st.error("No index found — build the pipeline outputs first.")
         else:
             with st.spinner("Retrieving context and generating answer…"):
-                results = search_index(question, _store(), _embedder(ollama_host), top_k=top_k)
+                results = search_index(question, _store(), _embedder(_store().embedding_model, ollama_host), top_k=top_k)
                 rag = answer_from_results(question, results, _llm(chat_model, ollama_host))
             answer_col, evidence_col = st.columns(2)
             with answer_col:

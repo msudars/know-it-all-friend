@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Iterator
+from collections.abc import Generator
 from dataclasses import dataclass, field
 
 from know_it_all_friend.embeddings.base import BaseEmbedder
@@ -127,8 +127,7 @@ def answer_from_results(
     If nothing is retrieved, no model call is made and the answer says so.
     """
     if not results:
-        return RagAnswer( # type: ignore[return-value]
-
+        return RagAnswer(
             answer="No relevant information was found in the knowledge base.",
             sources=[],
         )
@@ -138,15 +137,13 @@ def answer_from_results(
     invalid_citations = validate_citations(answer, len(results))
     if invalid_citations:
         logger.warning("Answer to %r cites out-of-range source(s): %s", question, invalid_citations)
-    return RagAnswer( # type: ignore[return-value]
-
+    return RagAnswer(
         answer=answer,
         sources=_sources_from_results(results),
         invalid_citations=invalid_citations,
     )
 
 
-from typing import Generator
 def answer_question_stream(
     question: str,
     store: LocalVectorStore,
@@ -154,7 +151,7 @@ def answer_question_stream(
     llm: BaseLLM,
     top_k: int = 5,
     max_context_chars: int = DEFAULT_MAX_CONTEXT_CHARS,
-) -> Iterator[str]:
+) -> Generator[str, None, RagAnswer]:
     """Like :func:`answer_question`, but yields the answer text incrementally.
 
     Yields chunks of the answer as they arrive from the LLM. Once the
@@ -167,8 +164,7 @@ def answer_question_stream(
     if not results:
         answer = "No relevant information was found in the knowledge base."
         yield answer
-        return RagAnswer( # type: ignore[return-value]
-answer=answer, sources=[])
+        return RagAnswer(answer=answer, sources=[])
 
     prompt = build_prompt(question, results, max_context_chars=max_context_chars)
     pieces: list[str] = []
@@ -180,8 +176,7 @@ answer=answer, sources=[])
     invalid_citations = validate_citations(answer, len(results))
     if invalid_citations:
         logger.warning("Answer to %r cites out-of-range source(s): %s", question, invalid_citations)
-    return RagAnswer( # type: ignore[return-value]
-
+    return RagAnswer(
         answer=answer,
         sources=_sources_from_results(results),
         invalid_citations=invalid_citations,

@@ -1,6 +1,6 @@
+import os
 from pathlib import Path
 
-import pytest
 from fastapi.testclient import TestClient
 
 from know_it_all_friend.api.app import create_app
@@ -81,3 +81,16 @@ def test_ask_returns_answer_with_sources(tmp_path: Path) -> None:
     body = response.json()
     assert body["answer"] == "Canned answer [1]."
     assert body["sources"][0]["chunk_id"] == "c1"
+
+
+def test_search_picks_up_a_rebuilt_index(tmp_path: Path) -> None:
+    index_dir = tmp_path / "index"
+    build_index([make_chunk("old", "alpha")], BagOfWordsEmbedder()).save(index_dir)
+    client = TestClient(create_app(index_dir=index_dir, embedder=BagOfWordsEmbedder()))
+    assert client.get("/search", params={"q": "alpha"}).json()[0]["chunk_id"] == "old"
+
+    build_index([make_chunk("new", "alpha")], BagOfWordsEmbedder()).save(index_dir)
+    config = index_dir / "config.json"
+    os.utime(config, (config.stat().st_atime, config.stat().st_mtime + 10))
+
+    assert client.get("/search", params={"q": "alpha"}).json()[0]["chunk_id"] == "new"

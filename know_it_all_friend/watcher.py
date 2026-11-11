@@ -9,6 +9,8 @@ from pathlib import Path
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
+from know_it_all_friend import paths
+
 logger = logging.getLogger(__name__)
 
 class PipelineTriggerHandler(FileSystemEventHandler):
@@ -17,6 +19,9 @@ class PipelineTriggerHandler(FileSystemEventHandler):
         self.debounce_seconds = debounce_seconds
         self._last_event_time = 0.0
         self._pending = False
+        # The pipeline's own writes must not re-trigger it, e.g. `kiaf watch .`
+        # from a clone whose ./storage sits inside the watched folder.
+        self._storage = paths.storage_root().resolve()
 
     def on_any_event(self, event):
         if event.is_directory:
@@ -25,6 +30,8 @@ class PipelineTriggerHandler(FileSystemEventHandler):
         path = str(event.src_path)
         # Skip hidden files or system files we shouldn't trigger on
         if "/." in path or path.startswith("."):
+            return
+        if Path(path).resolve().is_relative_to(self._storage):
             return
             
         # Only trigger on actual mutations, not reads/opens which happen during ingestion

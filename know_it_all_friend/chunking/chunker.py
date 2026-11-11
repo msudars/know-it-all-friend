@@ -187,7 +187,7 @@ def chunk_documents(
     """
     chunks: list[Chunk] = []
     for doc in docs:
-        if getattr(doc, "archived", False):
+        if doc.archived:
             logger.info("Skipping %s: archived document", doc.document_id)
             continue
         try:

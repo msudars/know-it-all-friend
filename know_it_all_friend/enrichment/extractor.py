@@ -100,11 +100,14 @@ def enrich_documents(
 ) -> list[DocumentEntities]:
     """Extract entities for every document in the metadata index.
 
-    A document whose Markdown cannot be read or whose model call fails is
-    logged and skipped; the rest of the collection is still enriched.
+    Archived documents (duplicates, superseded versions) are skipped, as in
+    chunking. A document whose Markdown cannot be read or whose model call
+    fails is logged and skipped; the rest of the collection is still enriched.
     """
     enriched: list[DocumentEntities] = []
     for doc in docs:
+        if doc.archived:  # duplicate or superseded version: not worth an LLM call
+            continue
         try:
             markdown_text = Path(doc.markdown_file).read_text(encoding="utf-8")
             entities, doc_date = extract_entities(markdown_text, llm, max_chars=max_chars)

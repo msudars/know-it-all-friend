@@ -114,26 +114,28 @@ def build_document_metadata(
     def normalize_name(name: str) -> str:
         # Only suffixes that actually mark a revision are stripped. A bare
         # trailing number is part of the name far more often than it is a
-        # version: `diagram1`/`diagram2` and `predictions_r0`/`predictions_r4`
-        # are distinct documents, and collapsing them archives real content.
-        # " 2" (copy-paste convention) and "(2)" still count as versions.
-        return re.sub(r'(_v\d+|-v\d+|_final|-final|\s*\(\d+\)|\s+\d+)$', '', name, flags=re.IGNORECASE).strip()
+        # version: `diagram1`/`diagram2`, `Lecture 1`/`Lecture 2` and
+        # `predictions_r0`/`predictions_r4` are distinct documents, and
+        # collapsing them archives real content. "(2)" (the download/copy
+        # convention) still counts as a version.
+        return re.sub(r'(_v\d+|-v\d+|_final|-final|\s*\(\d+\))$', '', name, flags=re.IGNORECASE).strip()
 
     seen_hashes: set[str] = set()
-    groups: dict[str, list[tuple[int, DocumentMetadata]]] = {}
-    
+    groups: dict[tuple[str, str], list[tuple[int, DocumentMetadata]]] = {}
+
     for i, doc in enumerate(docs):
         # 1. Exact duplicates
         if doc.content_hash in seen_hashes:
             docs[i] = DocumentMetadata(**{**asdict(doc), "archived": True})
             continue
         seen_hashes.add(doc.content_hash)
-        
-        # 2. Versioning
-        norm = normalize_name(Path(doc.source_file).stem)
-        groups.setdefault(norm, []).append((i, doc))
-        
-    for norm, group in groups.items():
+
+        # 2. Versioning -- only within one folder: `projA/README.md` and
+        # `projB/README.md` are different documents, not two revisions.
+        source = Path(doc.source_file)
+        groups.setdefault((source.parent.as_posix(), normalize_name(source.stem)), []).append((i, doc))
+
+    for group in groups.values():
         if len(group) > 1:
             group.sort(key=lambda x: x[1].modified_at, reverse=True)
             for i, doc in group[1:]:

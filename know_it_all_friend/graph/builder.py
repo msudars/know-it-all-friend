@@ -17,6 +17,7 @@ import json
 import logging
 from itertools import combinations
 from pathlib import Path
+from typing import cast
 
 from know_it_all_friend.enrichment.extractor import DocumentEntities
 from know_it_all_friend.metadata.extractor import DocumentMetadata
@@ -74,8 +75,6 @@ def write_graph(graph: dict, output_path: Path) -> None:
         json.dump(graph, f, indent=2)
     logger.info("Wrote graph to %s", output_path)
 
-
-from typing import cast
 
 def load_graph(graph_path: Path) -> dict:
     return cast(dict, json.loads(Path(graph_path).read_text(encoding="utf-8")))

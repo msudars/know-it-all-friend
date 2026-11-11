@@ -40,9 +40,6 @@ def main(input_dir: str) -> None:
     # --- Step 3: Extract metadata ---------------------------------------------
     from know_it_all_friend.metadata.extractor import build_document_metadata
 
-    import json
-
-    log_data = [r.__dict__ if hasattr(r, "__dict__") else {} for r in results]
     # Build a minimal conversion log for build_document_metadata
     conversion_log = [
         {

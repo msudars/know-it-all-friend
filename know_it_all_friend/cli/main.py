@@ -442,22 +442,16 @@ def ui(
     """Launch the Streamlit knowledge explorer (Phase 11)."""
     import os
     import subprocess
-    import sys
 
-    import know_it_all_friend.ui as ui_package
+    from know_it_all_friend.ui import streamlit_command
 
     env = os.environ.copy()
     env["KIAF_METADATA_PATH"] = str(metadata_file)
     env["KIAF_ENTITIES_PATH"] = str(entities_file)
     env["KIAF_INDEX_DIR"] = str(index_dir)
 
-    app_path = Path(ui_package.__file__).parent / "app.py"
     typer.echo(f"Launching knowledge explorer on http://localhost:{port}")
-    subprocess.run(
-        [sys.executable, "-m", "streamlit", "run", str(app_path), "--server.port", str(port)],
-        check=True,
-        env=env,
-    )
+    subprocess.run(streamlit_command(port), check=True, env=env)
 
 
 @app.command()

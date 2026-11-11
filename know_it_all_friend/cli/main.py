@@ -26,13 +26,16 @@ def run_ingest(
     enrich_docs: bool = True,
 ) -> None:
     """Run the whole pipeline in-process. Shared by `kiaf ingest` and the folder watcher."""
+    from know_it_all_friend.chunking.chunker import DEFAULT_MAX_CHARS, DEFAULT_OVERLAP_CHARS
+    from know_it_all_friend.enrichment.extractor import DEFAULT_MAX_CHARS as ENRICH_MAX_CHARS
+
     inventory(input_dir=input_dir, output=paths.MANIFEST, recursive=True, include_system_files=False)
     convert(manifest=paths.MANIFEST, output=paths.MARKDOWN_DIR, log=paths.CONVERSION_LOG)
     metadata(manifest=paths.MANIFEST, log=paths.CONVERSION_LOG, output=paths.DOCUMENTS)
-    chunk(metadata_file=paths.DOCUMENTS, output=paths.CHUNKS, max_chars=1500, overlap_chars=200)
+    chunk(metadata_file=paths.DOCUMENTS, output=paths.CHUNKS, max_chars=DEFAULT_MAX_CHARS, overlap_chars=DEFAULT_OVERLAP_CHARS)
     index(chunks_file=paths.CHUNKS, output=paths.INDEX_DIR, embed_model=embed_model, host=host)
     if enrich_docs:
-        enrich(metadata_file=paths.DOCUMENTS, output=paths.ENTITIES, model=model, max_chars=8000, host=host)
+        enrich(metadata_file=paths.DOCUMENTS, output=paths.ENTITIES, model=model, max_chars=ENRICH_MAX_CHARS, host=host)
         graph_build(metadata_file=paths.DOCUMENTS, entities_file=paths.ENTITIES, output=paths.GRAPH)
 
 
@@ -212,11 +215,11 @@ def search(
         paths.INDEX_DIR, "--index", help="Index directory produced by `kiaf index`."
     ),
     top_k: int = typer.Option(5, help="Number of results to return."),
-    mode: str = typer.Option(
+    mode: typing.Literal["vector", "hybrid"] = typer.Option(
         "vector", help="'vector' for pure cosine search, 'hybrid' to fuse in BM25 keyword search."
     ),
     alpha: float = typer.Option(0.5, help="Hybrid mode only: RRF weight toward vector vs. keyword."),
-    score_threshold: float = typer.Option(
+    score_threshold: float | None = typer.Option(
         None, help="Drop results below this score instead of always returning top_k."
     ),
     diversify: bool = typer.Option(
@@ -236,7 +239,7 @@ def search(
         store,
         embedder,
         top_k=top_k,
-        mode=typing.cast(typing.Literal["vector", "hybrid"], mode),
+        mode=mode,
         alpha=alpha,
         score_threshold=score_threshold,
         diversify=diversify,

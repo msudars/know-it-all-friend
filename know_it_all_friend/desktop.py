@@ -77,7 +77,10 @@ def start_desktop() -> None:
         # Fallback: open in default browser
         import webbrowser
         webbrowser.open(url)
-        logger.info("Launched browser as fallback. Press Ctrl+C to stop server.")
+        logger.info(
+            "Opened in your browser (native window needs the [desktop] extra). "
+            "Press Ctrl+C to stop the server."
+        )
         try:
             process.wait()
         finally:

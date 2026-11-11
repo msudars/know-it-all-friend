@@ -753,15 +753,19 @@ dependencies = [
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "numpy", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "ollama" },
-    { name = "pyqt6" },
-    { name = "pyqt6-webengine" },
-    { name = "pywebview" },
-    { name = "qtpy" },
     { name = "rank-bm25" },
     { name = "streamlit" },
     { name = "typer" },
     { name = "uvicorn" },
     { name = "watchdog" },
+]
+
+[package.optional-dependencies]
+desktop = [
+    { name = "pyqt6" },
+    { name = "pyqt6-webengine" },
+    { name = "pywebview" },
+    { name = "qtpy" },
 ]
 
 [package.dev-dependencies]
@@ -779,16 +783,17 @@ requires-dist = [
     { name = "markitdown", extras = ["pdf", "docx", "pptx", "xlsx"], specifier = ">=0.0.1a3" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "ollama", specifier = ">=0.4" },
-    { name = "pyqt6", specifier = ">=6.11.0" },
-    { name = "pyqt6-webengine", specifier = ">=6.11.0" },
-    { name = "pywebview", specifier = ">=6.2.1" },
-    { name = "qtpy", specifier = ">=2.4.3" },
+    { name = "pyqt6", marker = "extra == 'desktop'", specifier = ">=6.11.0" },
+    { name = "pyqt6-webengine", marker = "extra == 'desktop'", specifier = ">=6.11.0" },
+    { name = "pywebview", marker = "extra == 'desktop'", specifier = ">=6.2.1" },
+    { name = "qtpy", marker = "extra == 'desktop'", specifier = ">=2.4.3" },
     { name = "rank-bm25", specifier = ">=0.2.2" },
     { name = "streamlit", specifier = ">=1.59.0" },
     { name = "typer", specifier = ">=0.12" },
     { name = "uvicorn", specifier = ">=0.50.2" },
     { name = "watchdog", specifier = ">=6.0.0" },
 ]
+provides-extras = ["desktop"]
 
 [package.metadata.requires-dev]
 dev = [

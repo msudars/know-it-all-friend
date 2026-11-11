@@ -68,8 +68,7 @@ with st.sidebar:
     if (INDEX_DIR / "config.json").exists():
         st.success(f"Index: {len(_store())} chunks ({_store().embedding_model})")
     else:
-        st.error("No index found. Run the pipeline first:\n`kiaf inventory` → `convert` → "
-                 "`metadata` → `chunk` → `index`")
+        st.error("No index found. Build one first: `kiaf ingest <folder>`")
 
 search_tab, ask_tab, documents_tab = st.tabs(["🔍 Search", "💬 Ask", "📄 Documents"])
 

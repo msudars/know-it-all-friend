@@ -22,6 +22,12 @@ Documents → Markdown → Chunks → Embeddings → Vector index → Search · 
 uv tool install git+https://github.com/msudars/know-it-all-friend.git
 ```
 
+Want `kiaf desktop` in a native window? Install the desktop extra instead (adds Qt, a few hundred MB):
+
+```bash
+uv tool install "know-it-all-friend[desktop] @ git+https://github.com/msudars/know-it-all-friend.git"
+```
+
 **2. Install [Ollama](https://ollama.com) and pull the two local models:**
 
 ```bash
@@ -58,7 +64,7 @@ kiaf ask "What information is available about Topic A?"
 
 Every pipeline stage is also its own command — `inventory`, `convert`, `metadata`, `chunk`, `index`, `enrich`, `graph build` — useful for debugging and inspecting intermediate outputs. Run `kiaf --help` or `kiaf <command> --help` for all options.
 
-> `kiaf desktop` on Linux needs QtWebEngine's system libraries (Debian/Ubuntu): `sudo apt-get install libnss3 libasound2t64 libxcb-cursor0 libxcb-icccm4 libxcb-util1 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-xkb1 libxkbcommon-x11-0`. Without a working GUI backend it falls back to opening your browser.
+> `kiaf desktop` opens a native window when installed with the `[desktop]` extra; on Linux that needs QtWebEngine's system libraries (Debian/Ubuntu): `sudo apt-get install libnss3 libasound2t64 libxcb-cursor0 libxcb-icccm4 libxcb-util1 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-xkb1 libxkbcommon-x11-0`. Without a working GUI backend it falls back to opening your browser.
 
 ---
 
@@ -116,7 +122,7 @@ The index records which embedding model built it, so queries always use the matc
 ```bash
 git clone https://github.com/msudars/know-it-all-friend.git
 cd know-it-all-friend
-uv sync              # create .venv and install pinned dependencies
+uv sync --all-extras # create .venv and install pinned dependencies (incl. desktop)
 uv run pytest        # run the test suite
 uv run kiaf --help
 ```

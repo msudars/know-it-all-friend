@@ -16,6 +16,11 @@ dependencies = [
     "rank-bm25>=0.2.2",
     "httpx>=0.28.1",
     "watchdog>=6.0.0",
+]
+
+[project.optional-dependencies]
+# Native window for `kiaf desktop`; without it, it opens the explorer in your browser.
+desktop = [
     "pywebview>=6.2.1",
     "pyqt6>=6.11.0",
     "pyqt6-webengine>=6.11.0",

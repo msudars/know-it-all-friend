@@ -6,7 +6,7 @@ modules need, so changes to an interface only require one update.
 
 from __future__ import annotations
 
-import pytest
+from collections.abc import Iterator
 
 from know_it_all_friend.chunking.chunker import Chunk
 from know_it_all_friend.embeddings.base import BaseEmbedder
@@ -73,8 +73,6 @@ class ScriptedLLM(BaseLLM):
 
     def generate(self, prompt: str, system: str | None = None) -> str:
         return self._answer
-
-    from typing import Iterator
 
     def generate_stream(self, prompt: str, system: str | None = None) -> Iterator[str]:
         midpoint = len(self._answer) // 2

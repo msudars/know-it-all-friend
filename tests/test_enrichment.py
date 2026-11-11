@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 from pathlib import Path
 
 from know_it_all_friend.enrichment.extractor import (
@@ -108,3 +109,13 @@ def test_write_and_load_entities_round_trip(tmp_path: Path) -> None:
     write_entities(enriched, path)
 
     assert load_entities(path) == enriched
+
+
+def test_enrich_documents_skips_archived(tmp_path: Path) -> None:
+    llm = CannedLLM(json.dumps({"topics": ["Topic A"]}))
+    docs = [_doc(tmp_path, "# Live\n", "live"), replace(_doc(tmp_path, "# Old\n", "old"), archived=True)]
+
+    enriched = enrich_documents(docs, llm)
+
+    assert [e.document_id for e in enriched] == ["live"]
+    assert len(llm.prompts) == 1

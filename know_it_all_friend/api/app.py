@@ -55,12 +55,18 @@ def create_app(
     state: dict = {"store": store, "embedder": embedder, "llm": llm}
 
     def get_store() -> LocalVectorStore:
-        if state["store"] is None:
-            if not (Path(index_dir) / "config.json").exists():
-                raise HTTPException(
-                    status_code=503, detail=f"No index at {index_dir}; run `kiaf index` first."
-                )
+        if store is not None:
+            return store
+        config = Path(index_dir) / "config.json"
+        if not config.exists():
+            raise HTTPException(
+                status_code=503, detail=f"No index at {index_dir}; run `kiaf index` first."
+            )
+        # Reload when the index is rebuilt (e.g. by `kiaf watch`) instead of serving it stale.
+        mtime = config.stat().st_mtime
+        if state.get("store_mtime") != mtime:
             state["store"] = LocalVectorStore.load(index_dir)
+            state["store_mtime"] = mtime
         return state["store"]
 
     def get_embedder() -> BaseEmbedder:

@@ -56,3 +56,33 @@ def test_search_index_returns_traceable_results() -> None:
     assert results[0].source_file == "input/report.txt"
     assert results[0].heading == "Section"
     assert results[0].score > 0
+
+
+class _CountingEmbedder(BagOfWordsEmbedder):
+    def __init__(self) -> None:
+        self.seen: list[str] = []
+
+    def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        self.seen.extend(texts)
+        return super().embed_texts(texts)
+
+
+def test_build_index_reuses_vectors_for_unchanged_text() -> None:
+    previous = build_index([make_chunk("c1", "alpha"), make_chunk("c2", "beta")], BagOfWordsEmbedder())
+    embedder = _CountingEmbedder()
+
+    store = build_index([make_chunk("c1", "alpha"), make_chunk("c3", "gamma")], embedder, previous=previous)
+
+    assert embedder.seen == ["gamma"]
+    assert [c.chunk_id for c, _ in store.query([1.0, 0.0, 0.0, 0.0], top_k=1)] == ["c1"]
+    assert [c.chunk_id for c, _ in store.query([0.0, 0.0, 1.0, 0.0], top_k=1)] == ["c3"]
+
+
+def test_build_index_ignores_previous_from_another_model() -> None:
+    previous = build_index([make_chunk("c1", "alpha")], BagOfWordsEmbedder())
+    embedder = _CountingEmbedder()
+    embedder.model = "other-model"
+
+    build_index([make_chunk("c1", "alpha")], embedder, previous=previous)
+
+    assert embedder.seen == ["alpha"]

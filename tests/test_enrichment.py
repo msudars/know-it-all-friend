@@ -119,3 +119,18 @@ def test_enrich_documents_skips_archived(tmp_path: Path) -> None:
 
     assert [e.document_id for e in enriched] == ["live"]
     assert len(llm.prompts) == 1
+
+
+def test_enrich_documents_reuses_entities_for_unchanged_content(tmp_path: Path) -> None:
+    llm = CannedLLM(json.dumps({"topics": ["Fresh"]}))
+    same = replace(_doc(tmp_path, "# Same\n", "same"), content_hash="h1")
+    changed = replace(_doc(tmp_path, "# Changed\n", "changed"), content_hash="h2-new")
+    previous = [
+        DocumentEntities("same", {"topics": ["Cached"]}, content_hash="h1", model=llm.model),
+        DocumentEntities("changed", {"topics": ["Stale"]}, content_hash="h2-old", model=llm.model),
+    ]
+
+    enriched = enrich_documents([same, changed], llm, previous=previous)
+
+    assert [e.entities["topics"] for e in enriched] == [["Cached"], ["Fresh"]]
+    assert len(llm.prompts) == 1

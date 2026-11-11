@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
 from know_it_all_friend.metadata.extractor import DocumentMetadata
@@ -40,6 +40,9 @@ class DocumentEntities:
     document_id: str
     entities: dict[str, list[str]]
     document_date: str = ""
+    # What produced these entities, so an unchanged document isn't re-sent to the LLM.
+    content_hash: str = ""
+    model: str = ""
 
 
 def build_enrichment_prompt(text: str) -> str:
@@ -97,16 +100,31 @@ def enrich_documents(
     docs: list[DocumentMetadata],
     llm: BaseLLM,
     max_chars: int = DEFAULT_MAX_CHARS,
+    previous: list[DocumentEntities] | None = None,
 ) -> list[DocumentEntities]:
     """Extract entities for every document in the metadata index.
+
+    Entities in ``previous`` are reused for any document whose content hash
+    and model match, so only new or changed documents cost an LLM call.
 
     Archived documents (duplicates, superseded versions) are skipped, as in
     chunking. A document whose Markdown cannot be read or whose model call
     fails is logged and skipped; the rest of the collection is still enriched.
     """
+    # Empty results aren't reused: an unparseable model reply also comes back empty.
+    # ponytail: cache ignores max_chars/prompt changes; delete entities.json to redo all.
+    cache = {
+        (e.content_hash, e.model): e
+        for e in previous or []
+        if e.content_hash and any(e.entities.values())
+    }
     enriched: list[DocumentEntities] = []
     for doc in docs:
         if doc.archived:  # duplicate or superseded version: not worth an LLM call
+            continue
+        hit = cache.get((doc.content_hash, llm.model))
+        if hit is not None:
+            enriched.append(replace(hit, document_id=doc.document_id))
             continue
         try:
             markdown_text = Path(doc.markdown_file).read_text(encoding="utf-8")
@@ -114,7 +132,15 @@ def enrich_documents(
         except Exception as exc:  # noqa: BLE001 - must not abort the batch
             logger.warning("Skipping %s: enrichment failed: %s", doc.document_id, exc)
             continue
-        enriched.append(DocumentEntities(document_id=doc.document_id, entities=entities, document_date=doc_date))
+        enriched.append(
+            DocumentEntities(
+                document_id=doc.document_id,
+                entities=entities,
+                document_date=doc_date,
+                content_hash=doc.content_hash,
+                model=llm.model,
+            )
+        )
         found = sum(len(v) for v in entities.values())
         logger.info("Enriched %s: %d entit(ies), date=%s", doc.document_id, found, doc_date)
     return enriched
